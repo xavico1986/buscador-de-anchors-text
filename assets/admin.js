@@ -62,7 +62,7 @@
             }
             return String(text)
                 .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;/g, '&gt;')
+                .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
@@ -368,8 +368,8 @@
                     }
                     updateState({
                         extracting: false,
-                        anchors: data.anchors || [],
-                        quotas: data.quotas || null,
+                        anchors: (data && data.anchors) ? data.anchors : [],
+                        quotas: (data && data.quotas) ? data.quotas : null,
                         postDetail: updatedDetail || state.postDetail,
                         notice: '',
                         noticeType: 'success'

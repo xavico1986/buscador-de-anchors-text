@@ -210,13 +210,35 @@ class SAI_Anchors {
                 $grouped[ $candidate['classification'] ][] = $candidate;
             }
 
+            // Si aparece el canónico literal y aún no hay "exacta", inyectarlo.
+            $canonical_frequency = $this->count_frequency( $canonical, $body_text );
+            if ( $canonical_frequency > 0 && empty( $grouped['exacta'] ) ) {
+                $start_position = mb_strpos( $body_text, $canonical, 0, 'UTF-8' );
+                if ( false === $start_position ) {
+                    $start_position = PHP_INT_MAX;
+                }
+
+                $grouped['exacta'][] = [
+                    'text'           => $canonical,
+                    'classification' => 'exacta',
+                    'frequency'      => $canonical_frequency,
+                    'start'          => $start_position,
+                ];
+            }
+
             foreach ( $grouped as &$items ) {
                 usort(
                     $items,
                     function ( $a, $b ) {
                         if ( $a['frequency'] === $b['frequency'] ) {
-                            return mb_strlen( $a['text'] ) <=> mb_strlen( $b['text'] );
+                            $len_compare = mb_strlen( $a['text'], 'UTF-8' ) <=> mb_strlen( $b['text'], 'UTF-8' );
+                            if ( 0 !== $len_compare ) {
+                                return $len_compare;
+                            }
+
+                            return ( $a['start'] ?? PHP_INT_MAX ) <=> ( $b['start'] ?? PHP_INT_MAX );
                         }
+
                         return $b['frequency'] <=> $a['frequency'];
                     }
                 );
@@ -229,6 +251,9 @@ class SAI_Anchors {
             }
 
             $quotas  = $this->resolve_quotas( $presets, $grouped );
+            if ( is_wp_error( $quotas ) ) {
+                return $quotas;
+            }
             $anchors = $this->select_anchors( $grouped, $quotas );
 
             if ( count( $anchors ) === $target_total ) {
@@ -255,9 +280,9 @@ class SAI_Anchors {
 
         return new WP_Error(
             'sai_no_candidates',
-            __( 'No hay suficientes frases válidas en el cuerpo para cubrir las cuotas sin romper reglas de calidad', 'anchors-sin-ia' ),
+            __( 'No hay suficientes frases válidas para cubrir las cuotas SEO sin violar las reglas (exacta/frase/semántica).', 'anchors-sin-ia' ),
             [
-                'status'     => 400,
+                'status'     => 422,
                 'word_count' => $word_count,
             ]
         );
@@ -377,6 +402,7 @@ class SAI_Anchors {
                 $candidates[] = [
                     'text'   => $substr,
                     'tokens' => array_slice( $tokens, $i, $window ),
+                    'start'  => $start_char,
                 ];
             }
         }
@@ -404,9 +430,11 @@ class SAI_Anchors {
         if ( preg_match( "/[\\.,;:\"'()\\[\\]{}<>]/u", $text ) ) {
             return false;
         }
+
         if ( false !== mb_strpos( $text, '“' ) || false !== mb_strpos( $text, '”' ) || false !== mb_strpos( $text, '«' ) || false !== mb_strpos( $text, '»' ) || false !== mb_strpos( $text, '—' ) || false !== mb_strpos( $text, '–' ) ) {
             return false;
         }
+
         if ( false !== strpos( $text, '%' ) ) {
             return false;
         }
@@ -454,9 +482,11 @@ class SAI_Anchors {
         if ( preg_match( '/\b\d{2,}\b/', $text ) && preg_match( '/\b\d{7,}\b/', $text ) ) {
             return false;
         }
+
         if ( preg_match( '/[\d\.,]+\s?(%|usd|mxn|eur|\$)/iu', $text ) ) {
             return false;
         }
+
         if ( preg_match( '/\.[a-z]{2,}/iu', $text ) ) {
             if ( preg_match( '/\b[a-z0-9.-]+\.(com|mx|net|org|biz|info|edu|gob)(?:\.[a-z]{2})?\b/iu', $text ) ) {
                 return false;
@@ -472,6 +502,7 @@ class SAI_Anchors {
         if ( '' === $first_norm || in_array( $first_norm, $this->stopwords, true ) ) {
             return false;
         }
+
         if ( '' === $last_norm || in_array( $last_norm, $this->stopwords, true ) ) {
             return false;
         }
@@ -582,8 +613,20 @@ class SAI_Anchors {
                     $found = true;
                     if ( $candidate['frequency'] > $existing['frequency'] ) {
                         $existing = $candidate;
-                    } elseif ( $candidate['frequency'] === $existing['frequency'] && mb_strlen( $candidate['text'] ) < mb_strlen( $existing['text'] ) ) {
-                        $existing = $candidate;
+                    } elseif ( $candidate['frequency'] === $existing['frequency'] ) {
+                        $existing_length  = mb_strlen( $existing['text'], 'UTF-8' );
+                        $candidate_length = mb_strlen( $candidate['text'], 'UTF-8' );
+
+                        if ( $candidate_length < $existing_length ) {
+                            $existing = $candidate;
+                        } elseif ( $candidate_length === $existing_length ) {
+                            $existing_start  = $existing['start'] ?? PHP_INT_MAX;
+                            $candidate_start = $candidate['start'] ?? PHP_INT_MAX;
+
+                            if ( $candidate_start < $existing_start ) {
+                                $existing = $candidate;
+                            }
+                        }
                     }
                     break;
                 }
@@ -678,8 +721,20 @@ class SAI_Anchors {
                 $existing = $signatures[ $signature ];
                 if ( $candidate['frequency'] > $existing['frequency'] ) {
                     $signatures[ $signature ] = $candidate;
-                } elseif ( $candidate['frequency'] === $existing['frequency'] && mb_strlen( $candidate['text'] ) < mb_strlen( $existing['text'] ) ) {
-                    $signatures[ $signature ] = $candidate;
+                } elseif ( $candidate['frequency'] === $existing['frequency'] ) {
+                    $existing_length  = mb_strlen( $existing['text'], 'UTF-8' );
+                    $candidate_length = mb_strlen( $candidate['text'], 'UTF-8' );
+
+                    if ( $candidate_length < $existing_length ) {
+                        $signatures[ $signature ] = $candidate;
+                    } elseif ( $candidate_length === $existing_length ) {
+                        $existing_start  = $existing['start'] ?? PHP_INT_MAX;
+                        $candidate_start = $candidate['start'] ?? PHP_INT_MAX;
+
+                        if ( $candidate_start < $existing_start ) {
+                            $signatures[ $signature ] = $candidate;
+                        }
+                    }
                 }
             } else {
                 $signatures[ $signature ] = $candidate;
@@ -690,11 +745,11 @@ class SAI_Anchors {
     }
 
     /**
-     * Resolves quotas reassigning deficits according to fallback rules.
+     * Resolves quotas enforcing preset counts without reassignments.
      *
      * @param array $presets Base presets.
      * @param array $grouped Candidates grouped by class.
-     * @return array
+     * @return array|WP_Error
      */
     protected function resolve_quotas( $presets, $grouped ) {
         $available = [
@@ -703,88 +758,32 @@ class SAI_Anchors {
             'semantica' => isset( $grouped['semantica'] ) ? count( $grouped['semantica'] ) : 0,
         ];
 
-        $quotas = [
+        $need = [
             'exacta'    => (int) $presets['exacta'],
             'frase'     => (int) $presets['frase'],
             'semantica' => (int) $presets['semantica'],
         ];
 
-        // Exacta deficit moves to frase then semantica.
-        $deficit_exacta = max( 0, $quotas['exacta'] - $available['exacta'] );
-        if ( $deficit_exacta > 0 ) {
-            $quotas['exacta'] = $available['exacta'];
-
-            $room_frase = max( 0, $available['frase'] - $quotas['frase'] );
-            if ( $room_frase > 0 ) {
-                $transfer = min( $deficit_exacta, $room_frase );
-                $quotas['frase'] += $transfer;
-                $deficit_exacta  -= $transfer;
-            }
-
-            if ( $deficit_exacta > 0 ) {
-                $room_sem = max( 0, $available['semantica'] - $quotas['semantica'] );
-                if ( $room_sem > 0 ) {
-                    $transfer = min( $deficit_exacta, $room_sem );
-                    $quotas['semantica'] += $transfer;
-                    $deficit_exacta     -= $transfer;
-                }
+        foreach ( $need as $key => $value ) {
+            if ( $available[ $key ] < $value ) {
+                return new WP_Error(
+                    'sai_quota_deficit',
+                    sprintf(
+                        __( 'No se pueden cubrir las cuotas SEO: falta %s (necesarias %d, disponibles %d)', 'anchors-sin-ia' ),
+                        $key,
+                        $value,
+                        $available[ $key ]
+                    ),
+                    [
+                        'status'     => 422,
+                        'need'       => $need,
+                        'available'  => $available,
+                    ]
+                );
             }
         }
 
-        // Frase deficit moves to semantica.
-        $deficit_frase = max( 0, $quotas['frase'] - $available['frase'] );
-        if ( $deficit_frase > 0 ) {
-            $quotas['frase'] = $available['frase'];
-            $room_sem        = max( 0, $available['semantica'] - $quotas['semantica'] );
-            if ( $room_sem > 0 ) {
-                $transfer = min( $deficit_frase, $room_sem );
-                $quotas['semantica'] += $transfer;
-                $deficit_frase       -= $transfer;
-            }
-        }
-
-        // Cap semantica by available anchors.
-        $quotas['semantica'] = min( $quotas['semantica'], $available['semantica'] );
-
-        $available_total = $available['exacta'] + $available['frase'] + $available['semantica'];
-        $target_total    = min( (int) $presets['total'], $available_total );
-        $current_total   = $quotas['exacta'] + $quotas['frase'] + $quotas['semantica'];
-
-        if ( $current_total > $target_total ) {
-            foreach ( [ 'semantica', 'frase', 'exacta' ] as $type ) {
-                if ( $current_total <= $target_total ) {
-                    break;
-                }
-
-                $excess = $current_total - $target_total;
-                $reduction = min( $excess, $quotas[ $type ] );
-                $quotas[ $type ] -= $reduction;
-                $current_total   -= $reduction;
-            }
-        }
-
-        if ( $current_total < $target_total ) {
-            foreach ( [ 'frase', 'semantica', 'exacta' ] as $type ) {
-                if ( $current_total >= $target_total ) {
-                    break;
-                }
-
-                $room = max( 0, $available[ $type ] - $quotas[ $type ] );
-                if ( $room <= 0 ) {
-                    continue;
-                }
-
-                $add = min( $room, $target_total - $current_total );
-                $quotas[ $type ] += $add;
-                $current_total   += $add;
-            }
-        }
-
-        return [
-            'exacta'    => (int) $quotas['exacta'],
-            'frase'     => (int) $quotas['frase'],
-            'semantica' => (int) $quotas['semantica'],
-        ];
+        return $need;
     }
 
     /**
@@ -817,7 +816,12 @@ class SAI_Anchors {
                 }
 
                 if ( $a['frequency'] === $b['frequency'] ) {
-                    return mb_strlen( $a['text'] ) <=> mb_strlen( $b['text'] );
+                    $len_compare = mb_strlen( $a['text'], 'UTF-8' ) <=> mb_strlen( $b['text'], 'UTF-8' );
+                    if ( 0 !== $len_compare ) {
+                        return $len_compare;
+                    }
+
+                    return ( $a['start'] ?? PHP_INT_MAX ) <=> ( $b['start'] ?? PHP_INT_MAX );
                 }
 
                 return $b['frequency'] <=> $a['frequency'];
