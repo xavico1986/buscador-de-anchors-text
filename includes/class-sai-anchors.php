@@ -91,7 +91,7 @@ class SAI_Anchors {
     protected $connector_words = [ 'mx', 'com', 'de', 'del', 'para', 'en' ];
 
     /**
-     * Topic core terms that must appear in anchors (ampliada, todas relacionadas al tema).
+     * Topic core terms that must appear in anchors (base y ampliada).
      *
      * @var array
      */
@@ -101,6 +101,31 @@ class SAI_Anchors {
         'aligerada','aligeradas','nervada','nervadas','reticulares','entrepiso','entrepisos',
         'techo','techos','cubiertas','concreto','acero','aislamiento','termico','térmico'
     ];
+
+    /**
+     * Base core terms used to seed dynamic topic detection.
+     *
+     * @var array
+     */
+    protected $core_terms_base = [
+        'poliestireno','eps','unicel','aislamiento','térmico','acústico','losa','reticular','nervada','entrepiso',
+        'techo','cubierta','hormigón','concreto','acero','vigueta','cimbra','densidad','humedad',
+        'eficiencia energética','transporte','durabilidad',
+    ];
+
+    /**
+     * Runtime core terms derived per request.
+     *
+     * @var array
+     */
+    protected $runtime_core_terms = [];
+
+    /**
+     * Optional title injected at runtime.
+     *
+     * @var string
+     */
+    public $request_title = '';
 
     /**
      * Cleans raw content removing headings, scripts and HTML tags.
@@ -148,6 +173,9 @@ class SAI_Anchors {
      * @return array|WP_Error
      */
     public function extract( $canonical, $body_text ) {
+        // reset núcleo dinámico por petición
+        $this->runtime_core_terms = [];
+
         $body_text = $this->prepare_text( $body_text );
         $canonical = trim( (string) $canonical );
 
@@ -191,6 +219,13 @@ class SAI_Anchors {
         $canonical_norm      = $this->normalize( $canonical );
         $canonical_core      = $this->canonical_core( $canonical );
         $canonical_core_norm = $this->normalize( $canonical_core );
+
+        // Construir términos core dinámicos desde canónico, título y texto.
+        $maybe_title = '';
+        if ( property_exists( $this, 'request_title' ) ) {
+            $maybe_title = (string) $this->request_title;
+        }
+        $this->runtime_core_terms = $this->build_core_terms_dynamic( $canonical, $body_text, $maybe_title );
 
         // Rondas de extracción con degradación controlada.
         $rounds = [
@@ -340,6 +375,203 @@ class SAI_Anchors {
         $filtered = array_diff( $tokens, $this->connector_words );
         $filtered = array_filter( $filtered );
         return implode( ' ', $filtered );
+    }
+
+    /**
+     * Builds dynamic core terms using canonical, title and body context.
+     *
+     * @param string $canonical    Canonical keyword.
+     * @param string $context_text Body text context.
+     * @param string $maybe_title  Optional title text.
+     * @return array
+     */
+    protected function build_core_terms_dynamic( $canonical, $context_text, $maybe_title = '' ) {
+        $terms = [];
+
+        foreach ( $this->core_terms_base as $term ) {
+            $normalized = $this->normalize( $term );
+            if ( '' !== $normalized ) {
+                $terms[] = $normalized;
+            }
+        }
+
+        foreach ( $this->core_terms as $term ) {
+            $normalized = $this->normalize( $term );
+            if ( '' !== $normalized ) {
+                $terms[] = $normalized;
+            }
+        }
+
+        $canonical_norm = $this->normalize( $canonical );
+        if ( '' !== $canonical_norm ) {
+            $terms[] = $canonical_norm;
+        }
+
+        $canonical_core      = $this->canonical_core( $canonical );
+        $canonical_core_norm = $this->normalize( $canonical_core );
+        if ( '' !== $canonical_core_norm ) {
+            $terms[] = $canonical_core_norm;
+
+            $core_tokens = preg_split( '/\s+/u', $canonical_core_norm );
+            foreach ( $core_tokens as $token ) {
+                if ( '' !== $token && ! in_array( $token, $this->stopwords, true ) ) {
+                    $terms[] = $token;
+                }
+            }
+        }
+
+        $title_source = trim( (string) $maybe_title );
+        if ( '' === $title_source ) {
+            $snippet_words = preg_split( '/\s+/u', trim( (string) $context_text ) );
+            if ( ! empty( $snippet_words ) ) {
+                $title_source = implode( ' ', array_slice( $snippet_words, 0, 12 ) );
+            }
+        }
+
+        if ( '' !== $title_source ) {
+            $title_norm   = $this->normalize( $title_source );
+            $title_tokens = array_filter( preg_split( '/\s+/u', $title_norm ) );
+            foreach ( $title_tokens as $token ) {
+                if ( '' === $token || in_array( $token, $this->stopwords, true ) ) {
+                    continue;
+                }
+                $terms[] = $token;
+            }
+        }
+
+        $ngrams = $this->top_ngrams_from_text( $context_text, 1, 3, 12 );
+        foreach ( $ngrams as $ngram ) {
+            if ( '' !== $ngram ) {
+                $terms[] = $ngram;
+            }
+        }
+
+        $terms = array_filter(
+            $terms,
+            function ( $term ) {
+                return '' !== $term;
+            }
+        );
+
+        $terms = array_values( array_unique( $terms ) );
+
+        return $terms;
+    }
+
+    /**
+     * Extracts frequent n-grams from text to seed dynamic core terms.
+     *
+     * @param string $text   Text to analyze.
+     * @param int    $min_n  Minimum n-gram size.
+     * @param int    $max_n  Maximum n-gram size.
+     * @param int    $limit  Maximum n-grams to return.
+     * @return array
+     */
+    protected function top_ngrams_from_text( $text, $min_n = 1, $max_n = 3, $limit = 12 ) {
+        $text   = $this->prepare_text( $text );
+        $min_n  = max( 1, (int) $min_n );
+        $max_n  = max( $min_n, (int) $max_n );
+        $limit  = max( 1, (int) $limit );
+        $ngrams = [];
+
+        if ( '' === $text ) {
+            return [];
+        }
+
+        if ( ! preg_match_all( '/\b[\p{L}0-9][\p{L}0-9\p{Mn}\p{Pd}]*\b/u', $text, $matches ) ) {
+            return [];
+        }
+
+        $tokens = [];
+        foreach ( $matches[0] as $match ) {
+            $normalized = $this->normalize_token( $match );
+            if ( '' === $normalized ) {
+                continue;
+            }
+            $tokens[] = $normalized;
+        }
+
+        $token_count = count( $tokens );
+        if ( 0 === $token_count ) {
+            return [];
+        }
+
+        $candidates = [];
+
+        for ( $n = $min_n; $n <= $max_n; $n++ ) {
+            if ( $n > $token_count ) {
+                break;
+            }
+
+            for ( $i = 0; $i <= $token_count - $n; $i++ ) {
+                $slice = array_slice( $tokens, $i, $n );
+                if ( empty( $slice ) ) {
+                    continue;
+                }
+
+                $first = $slice[0];
+                $last  = $slice[ count( $slice ) - 1 ];
+
+                if ( in_array( $first, $this->stopwords, true ) || in_array( $last, $this->stopwords, true ) ) {
+                    continue;
+                }
+
+                $non_stop = 0;
+                foreach ( $slice as $token ) {
+                    if ( ! in_array( $token, $this->stopwords, true ) ) {
+                        $non_stop++;
+                    }
+                }
+
+                if ( $non_stop < 1 ) {
+                    continue;
+                }
+
+                $phrase = implode( ' ', $slice );
+
+                if ( '' === $phrase ) {
+                    continue;
+                }
+
+                if ( isset( $candidates[ $phrase ] ) ) {
+                    $candidates[ $phrase ]['frequency']++;
+                } else {
+                    $candidates[ $phrase ] = [
+                        'text'      => $phrase,
+                        'frequency' => 1,
+                        'length'    => mb_strlen( $phrase, 'UTF-8' ),
+                        'start'     => $i,
+                    ];
+                }
+            }
+        }
+
+        if ( empty( $candidates ) ) {
+            return [];
+        }
+
+        $items = array_values( $candidates );
+        usort(
+            $items,
+            function ( $a, $b ) {
+                if ( $a['frequency'] === $b['frequency'] ) {
+                    if ( $a['length'] === $b['length'] ) {
+                        return $a['start'] <=> $b['start'];
+                    }
+                    return $a['length'] <=> $b['length'];
+                }
+                return $b['frequency'] <=> $a['frequency'];
+            }
+        );
+
+        $items = array_slice( $items, 0, $limit );
+
+        return array_map(
+            function ( $item ) {
+                return $item['text'];
+            },
+            $items
+        );
     }
 
     /**
@@ -530,10 +762,13 @@ class SAI_Anchors {
             }
         }
 
-        // Debe contener núcleo temático o canónico.
+        // Debe contener núcleo temático (dinámico) o tokens del canónico.
         $contains_core = false;
-        foreach ( $this->core_terms as $term ) {
-            if ( false !== strpos( $normalized, $term ) ) {
+
+        $core_terms = ! empty( $this->runtime_core_terms ) ? $this->runtime_core_terms : $this->core_terms;
+        foreach ( $core_terms as $term ) {
+            $term_norm = $this->normalize( $term );
+            if ( '' !== $term_norm && false !== mb_strpos( $normalized, $term_norm, 0, 'UTF-8' ) ) {
                 $contains_core = true;
                 break;
             }
