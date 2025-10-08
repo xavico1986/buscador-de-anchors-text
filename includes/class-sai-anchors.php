@@ -994,11 +994,15 @@ class SAI_Anchors {
     }
 
     /**
-     * Resolves quotas enforcing preset counts without reassignments.
+     * Resuelve cuotas con fallback elástico:
+     * - Intenta cubrir las cuotas preset por tipo.
+     * - Si falta alguna (p.ej. "frase"), rellena con otras clases disponibles,
+     *   priorizando: frase <- semantica <- exacta, hasta alcanzar el total preset.
+     * - Si aun así no se llega al total, devuelve WP_Error.
      *
-     * @param array $presets Base presets.
-     * @param array $grouped Candidates grouped by class.
-     * @return array|WP_Error
+     * @param array $presets  Base presets (total, exacta, frase, semantica).
+     * @param array $grouped  Candidatos agrupados por clase.
+     * @return array|WP_Error Cuotas finales por clase.
      */
     protected function resolve_quotas( $presets, $grouped ) {
         $available = [
@@ -1008,31 +1012,85 @@ class SAI_Anchors {
         ];
 
         $need = [
+            'total'     => (int) $presets['total'],
             'exacta'    => (int) $presets['exacta'],
             'frase'     => (int) $presets['frase'],
             'semantica' => (int) $presets['semantica'],
         ];
 
-        foreach ( $need as $key => $value ) {
-            if ( $available[ $key ] < $value ) {
-                return new WP_Error(
-                    'sai_quota_deficit',
-                    sprintf(
-                        __( 'No se pueden cubrir las cuotas SEO: falta %s (necesarias %d, disponibles %d)', 'anchors-sin-ia' ),
-                        $key,
-                        $value,
-                        $available[ $key ]
-                    ),
-                    [
-                        'status'     => 422,
-                        'need'       => $need,
-                        'available'  => $available,
-                    ]
-                );
+        // Paso 1: asignación base limitada por disponibilidad.
+        $quotas = [
+            'exacta'    => min( $need['exacta'], $available['exacta'] ),
+            'frase'     => min( $need['frase'], $available['frase'] ),
+            'semantica' => min( $need['semantica'], $available['semantica'] ),
+        ];
+
+        $assigned = $quotas['exacta'] + $quotas['frase'] + $quotas['semantica'];
+
+        if ( $assigned >= $need['total'] ) {
+            return $quotas;
+        }
+
+        // Preferencias para compensar déficits.
+        $order_fill = [
+            'frase'     => [ 'semantica', 'exacta' ],
+            'semantica' => [ 'frase', 'exacta' ],
+            'exacta'    => [ 'frase', 'semantica' ],
+        ];
+
+        // Excedentes disponibles por clase:
+        $surplus = [
+            'exacta'    => max( 0, $available['exacta'] - $quotas['exacta'] ),
+            'frase'     => max( 0, $available['frase'] - $quotas['frase'] ),
+            'semantica' => max( 0, $available['semantica'] - $quotas['semantica'] ),
+        ];
+
+        // Paso 2: intentar cumplir cuotas objetivo por clase usando excedentes de otras.
+        foreach ( [ 'frase', 'semantica', 'exacta' ] as $target ) {
+            while ( $assigned < $need['total'] && $quotas[ $target ] < $need[ $target ] ) {
+                $filled = false;
+                foreach ( $order_fill[ $target ] as $src ) {
+                    if ( $surplus[ $src ] > 0 ) {
+                        $surplus[ $src ]--;
+                        $quotas[ $target ]++;
+                        $assigned++;
+                        $filled = true;
+                        break;
+                    }
+                }
+                if ( ! $filled ) {
+                    break;
+                }
             }
         }
 
-        return $need;
+        // Paso 3: si aún falta para el total, añadir con lo que quede (prioridad SEO: frase -> semantica -> exacta).
+        foreach ( [ 'frase', 'semantica', 'exacta' ] as $src ) {
+            while ( $assigned < $need['total'] && $surplus[ $src ] > 0 ) {
+                $surplus[ $src ]--;
+                $quotas[ $src ]++;
+                $assigned++;
+            }
+        }
+
+        if ( $assigned < $need['total'] ) {
+            return new WP_Error(
+                'sai_quota_deficit',
+                sprintf(
+                    __( 'No se pueden cubrir las cuotas SEO: total necesario %d, candidatos disponibles %d', 'anchors-sin-ia' ),
+                    $need['total'],
+                    $assigned
+                ),
+                [
+                    'status'    => 422,
+                    'need'      => $need,
+                    'available' => $available,
+                    'assigned'  => $quotas,
+                ]
+            );
+        }
+
+        return $quotas;
     }
 
     /**

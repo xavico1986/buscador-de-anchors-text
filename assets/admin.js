@@ -1,3 +1,4 @@
+<script>
 (function () {
     'use strict';
 
@@ -447,4 +448,5 @@
         render();
     });
 })();
+</script>
 
