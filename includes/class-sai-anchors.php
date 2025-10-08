@@ -46,7 +46,18 @@ class SAI_Anchors {
     protected $cta_terms = [
         'whatsapp', 'compra', 'comprar', 'cotiza', 'cotizar', 'precio', 'oferta', 'ofertas', 'promocion',
         'promociones', 'promo', 'descuentos', 'clic', 'click', 'click aqui', 'haz clic', 'suscríbete', 'suscribete',
-        'registro', 'regístrate', 'registrate', 'teléfono', 'telefono', 'moldurama', 'mx'
+        'registro', 'regístrate', 'registrate', 'teléfono', 'telefono', 'moldurama', 'mx', 'llámanos', 'llamanos',
+        'envíanos', 'envianos'
+    ];
+
+    /**
+     * Boilerplate phrases to discard.
+     *
+     * @var array
+     */
+    protected $boilerplate_phrases = [
+        'en definitiva', 'muchos casos', 'otro aspecto', 'en terminos generales', 'en términos generales',
+        'estas medidas'
     ];
 
     /**
@@ -112,36 +123,49 @@ class SAI_Anchors {
         $body_text = $this->prepare_text( $body_text );
         $canonical = trim( (string) $canonical );
 
+        $word_count = $this->get_word_count( $body_text );
+        $presets    = $this->get_presets( $word_count );
+
+        $response = [
+            'word_count'      => $word_count,
+            'suggested_total' => 0,
+            'quotas'          => [ 'total' => 0, 'exacta' => 0, 'frase' => 0, 'semantica' => 0 ],
+            'anchors'         => [],
+        ];
+
         if ( '' === $body_text || '' === $canonical ) {
-            return [ 'anchors' => [], 'quotas' => [ 'total' => 0, 'exacta' => 0, 'frase' => 0, 'semantica' => 0 ] ];
+            return $response;
         }
 
-        $word_count    = $this->get_word_count( $body_text );
-        $presets       = $this->get_presets( $word_count );
-        $normalized    = $this->normalize( $body_text );
-        $tokens        = $this->tokenize_with_positions( $body_text );
-        $candidates    = $this->generate_candidates( $tokens, $body_text );
-        $canonical_norm = $this->normalize( $canonical );
-        $canonical_core = $this->canonical_core( $canonical );
-        $canonical_core_norm = $this->normalize( $canonical_core );
+        $tokens                 = $this->tokenize_with_positions( $body_text );
+        $canonical_norm         = $this->normalize( $canonical );
+        $canonical_core         = $this->canonical_core( $canonical );
+        $canonical_core_norm    = $this->normalize( $canonical_core );
 
-        $valid_candidates = [];
+        $valid_candidates = $this->collect_valid_candidates(
+            $tokens,
+            $body_text,
+            $canonical_norm,
+            $canonical_core_norm,
+            2,
+            7
+        );
 
-        foreach ( $candidates as $candidate ) {
-            if ( ! $this->is_candidate_valid( $candidate, $canonical_core_norm ) ) {
-                continue;
-            }
+        if ( count( $valid_candidates ) < $presets['total'] ) {
+            $additional = $this->collect_valid_candidates(
+                $tokens,
+                $body_text,
+                $canonical_norm,
+                $canonical_core_norm,
+                2,
+                8,
+                $valid_candidates
+            );
+            $valid_candidates = $this->merge_candidate_lists( $valid_candidates, $additional );
+        }
 
-            $classification = $this->classify_candidate( $candidate['text'], $canonical_norm, $canonical_core_norm );
-
-            $frequency = $this->count_frequency( $candidate['text'], $normalized );
-            if ( $frequency < 1 ) {
-                continue;
-            }
-
-            $candidate['classification'] = $classification;
-            $candidate['frequency']      = $frequency;
-            $valid_candidates[]          = $candidate;
+        if ( empty( $valid_candidates ) ) {
+            return $response;
         }
 
         $deduped = $this->deduplicate_candidates( $valid_candidates );
@@ -158,101 +182,32 @@ class SAI_Anchors {
                     if ( $a['frequency'] === $b['frequency'] ) {
                         return mb_strlen( $a['text'] ) <=> mb_strlen( $b['text'] );
                     }
-
                     return $b['frequency'] <=> $a['frequency'];
                 }
             );
         }
         unset( $items );
 
-        $selected = [];
-        $counts   = [ 'exacta' => 0, 'frase' => 0, 'semantica' => 0 ];
+        $quotas  = $this->resolve_quotas( $presets, $grouped );
+        $anchors = $this->select_anchors( $grouped, $quotas );
 
-        // Initial allocation respecting quotas per classification order.
-        foreach ( [ 'exacta', 'frase', 'semantica' ] as $type ) {
-            $limit = isset( $presets[ $type ] ) ? (int) $presets[ $type ] : 0;
-            if ( $limit < 1 || empty( $grouped[ $type ] ) ) {
-                continue;
-            }
-            $slice = array_slice( $grouped[ $type ], 0, $limit );
-            $selected = array_merge( $selected, $slice );
-            $counts[ $type ] = count( $slice );
-        }
-
-        $total_needed = (int) $presets['total'];
-        $total_selected = count( $selected );
-
-        if ( $total_selected < $total_needed ) {
-            $fallback_order = [ 'frase', 'semantica', 'exacta' ];
-            $used_texts     = array_column( $selected, 'text' );
-
-            foreach ( $fallback_order as $type ) {
-                if ( $total_selected >= $total_needed ) {
-                    break;
-                }
-
-                if ( empty( $grouped[ $type ] ) ) {
-                    continue;
-                }
-
-                $index = $counts[ $type ];
-                while ( isset( $grouped[ $type ][ $index ] ) && $total_selected < $total_needed ) {
-                    $candidate = $grouped[ $type ][ $index ];
-                    if ( in_array( $candidate['text'], $used_texts, true ) ) {
-                        $index++;
-                        continue;
-                    }
-                    $selected[]       = $candidate;
-                    $used_texts[]     = $candidate['text'];
-                    $counts[ $type ] += 1;
-                    $total_selected++;
-                    $index++;
-                }
+        $counts_actual = [ 'exacta' => 0, 'frase' => 0, 'semantica' => 0 ];
+        foreach ( $anchors as $anchor ) {
+            if ( isset( $counts_actual[ $anchor['class'] ] ) ) {
+                $counts_actual[ $anchor['class'] ]++;
             }
         }
 
-        // Cap totals by available anchors.
-        $counts['exacta']    = min( $counts['exacta'], count( $grouped['exacta'] ) );
-        $counts['frase']     = min( $counts['frase'], count( $grouped['frase'] ) );
-        $counts['semantica'] = min( $counts['semantica'], count( $grouped['semantica'] ) );
-        $counts['total']     = count( $selected );
+        $quotas['exacta']    = $counts_actual['exacta'];
+        $quotas['frase']     = $counts_actual['frase'];
+        $quotas['semantica'] = $counts_actual['semantica'];
+        $quotas['total']     = count( $anchors );
 
-        usort(
-            $selected,
-            function ( $a, $b ) {
-                $order = [ 'exacta' => 0, 'frase' => 1, 'semantica' => 2 ];
-                $class_cmp = $order[ $a['classification'] ] <=> $order[ $b['classification'] ];
-                if ( 0 !== $class_cmp ) {
-                    return $class_cmp;
-                }
-                if ( $a['frequency'] === $b['frequency'] ) {
-                    return mb_strlen( $a['text'] ) <=> mb_strlen( $b['text'] );
-                }
+        $response['anchors']         = $anchors;
+        $response['quotas']          = $quotas;
+        $response['suggested_total'] = count( $anchors );
 
-                return $b['frequency'] <=> $a['frequency'];
-            }
-        );
-
-        $anchors = array_map(
-            function ( $item ) {
-                return [
-                    'text'          => $item['text'],
-                    'class'         => $item['classification'],
-                    'frequency'     => $item['frequency'],
-                ];
-            },
-            $selected
-        );
-
-        return [
-            'anchors' => $anchors,
-            'quotas'  => [
-                'total'     => $counts['total'],
-                'exacta'    => $counts['exacta'],
-                'frase'     => $counts['frase'],
-                'semantica' => $counts['semantica'],
-            ],
-        ];
+        return $response;
     }
 
     /**
@@ -325,14 +280,16 @@ class SAI_Anchors {
      *
      * @param array  $tokens Tokens with positions.
      * @param string $text   Full text.
+     * @param int    $min_window Minimum tokens.
+     * @param int    $max_window Maximum tokens.
      * @return array
      */
-    protected function generate_candidates( $tokens, $text ) {
+    protected function generate_candidates( $tokens, $text, $min_window = 2, $max_window = 7 ) {
         $candidates = [];
         $token_count = count( $tokens );
 
         for ( $i = 0; $i < $token_count; $i++ ) {
-            for ( $window = 2; $window <= 7; $window++ ) {
+            for ( $window = $min_window; $window <= $max_window; $window++ ) {
                 $end_index = $i + $window - 1;
                 if ( $end_index >= $token_count ) {
                     break;
@@ -378,11 +335,6 @@ class SAI_Anchors {
             return false;
         }
 
-        if ( preg_match( '/\b\d{2,}\b/', $text ) && preg_match( '/\b\d{7,}\b/', $text ) ) {
-            // Likely a phone number.
-            return false;
-        }
-
         $tokens_norm = preg_split( '/\s+/u', $normalized );
         $alpha_tokens = array_filter(
             $tokens_norm,
@@ -412,6 +364,40 @@ class SAI_Anchors {
             }
         }
 
+        foreach ( $this->boilerplate_phrases as $phrase ) {
+            if ( false !== strpos( $normalized, $phrase ) ) {
+                return false;
+            }
+        }
+
+        if ( preg_match( '/\b\d{2,}\b/', $text ) && preg_match( '/\b\d{7,}\b/', $text ) ) {
+            // Likely a phone number.
+            return false;
+        }
+
+        if ( preg_match( '/[\d\.,]+\s?(%|usd|mxn|eur|\$)/iu', $text ) ) {
+            return false;
+        }
+
+        if ( preg_match( '/\.[a-z]{2,}/iu', $text ) ) {
+            if ( preg_match( '/\b[a-z0-9.-]+\.(com|mx|net|org|biz|info|edu|gob)(?:\.[a-z]{2})?\b/iu', $text ) ) {
+                return false;
+            }
+        }
+
+        $first_token = $candidate['tokens'][0]['token'];
+        $last_token  = $candidate['tokens'][ count( $candidate['tokens'] ) - 1 ]['token'];
+        $first_norm  = $this->normalize_token( $first_token );
+        $last_norm   = $this->normalize_token( $last_token );
+
+        if ( '' === $first_norm || in_array( $first_norm, $this->stopwords, true ) ) {
+            return false;
+        }
+
+        if ( '' === $last_norm || in_array( $last_norm, $this->stopwords, true ) ) {
+            return false;
+        }
+
         $contains_core = false;
         foreach ( $this->core_terms as $term ) {
             if ( false !== strpos( $normalized, $term ) ) {
@@ -435,6 +421,88 @@ class SAI_Anchors {
         }
 
         return true;
+    }
+
+    /**
+     * Collects valid candidates within a range of n-grams.
+     *
+     * @param array  $tokens Tokens with offsets.
+     * @param string $text   Body text.
+     * @param string $canonical_norm Normalized canonical.
+     * @param string $canonical_core_norm Normalized canonical core.
+     * @param int    $min_window Minimum tokens.
+     * @param int    $max_window Maximum tokens.
+     * @param array  $existing Already accepted candidates.
+     * @return array
+     */
+    protected function collect_valid_candidates( $tokens, $text, $canonical_norm, $canonical_core_norm, $min_window, $max_window, $existing = [] ) {
+        $raw_candidates = $this->generate_candidates( $tokens, $text, $min_window, $max_window );
+        $existing_texts = [];
+
+        foreach ( $existing as $candidate ) {
+            $existing_texts[ $candidate['text'] ] = true;
+        }
+
+        $valid = [];
+
+        foreach ( $raw_candidates as $candidate ) {
+            if ( isset( $existing_texts[ $candidate['text'] ] ) ) {
+                continue;
+            }
+
+            if ( ! $this->is_candidate_valid( $candidate, $canonical_core_norm ) ) {
+                continue;
+            }
+
+            $classification = $this->classify_candidate( $candidate['text'], $canonical_norm, $canonical_core_norm );
+            $frequency      = $this->count_frequency( $candidate['text'], $text );
+
+            if ( $frequency < 1 ) {
+                continue;
+            }
+
+            $candidate['classification'] = $classification;
+            $candidate['frequency']      = $frequency;
+            $valid[]                     = $candidate;
+            $existing_texts[ $candidate['text'] ] = true;
+        }
+
+        return $valid;
+    }
+
+    /**
+     * Merges candidate lists by text keeping the strongest frequency.
+     *
+     * @param array $primary Primary list.
+     * @param array $additional Additional list.
+     * @return array
+     */
+    protected function merge_candidate_lists( $primary, $additional ) {
+        if ( empty( $primary ) ) {
+            return $additional;
+        }
+
+        foreach ( $additional as $candidate ) {
+            $found = false;
+            foreach ( $primary as &$existing ) {
+                if ( $existing['text'] === $candidate['text'] ) {
+                    $found = true;
+                    if ( $candidate['frequency'] > $existing['frequency'] ) {
+                        $existing = $candidate;
+                    } elseif ( $candidate['frequency'] === $existing['frequency'] && mb_strlen( $candidate['text'] ) < mb_strlen( $existing['text'] ) ) {
+                        $existing = $candidate;
+                    }
+                    break;
+                }
+            }
+            unset( $existing );
+
+            if ( ! $found ) {
+                $primary[] = $candidate;
+            }
+        }
+
+        return $primary;
     }
 
     /**
@@ -468,24 +536,24 @@ class SAI_Anchors {
     }
 
     /**
-     * Counts frequency of anchor in normalized text.
+     * Counts frequency of anchor using strict word boundaries on original text.
      *
      * @param string $anchor_text Anchor text.
-     * @param string $normalized_text Normalized text.
+     * @param string $text        Body text.
      * @return int
      */
-    protected function count_frequency( $anchor_text, $normalized_text ) {
-        $anchor_norm = $this->normalize( $anchor_text );
-        if ( '' === $anchor_norm ) {
+    protected function count_frequency( $anchor_text, $text ) {
+        $anchor_text = $this->prepare_text( $anchor_text );
+        if ( '' === $anchor_text || '' === $text ) {
             return 0;
         }
 
-        $pattern = '/\b' . preg_quote( $anchor_norm, '/' ) . '\b/u';
-        if ( preg_match_all( $pattern, $normalized_text, $matches ) ) {
+        $pattern = '/(?<![\p{L}\p{N}])' . preg_quote( $anchor_text, '/' ) . '(?![\p{L}\p{N}])/u';
+        if ( preg_match_all( $pattern, $text, $matches ) ) {
             return count( $matches[0] );
         }
 
-        return substr_count( $normalized_text, $anchor_norm );
+        return 0;
     }
 
     /**
@@ -527,6 +595,165 @@ class SAI_Anchors {
     }
 
     /**
+     * Resolves quotas reassigning deficits according to fallback rules.
+     *
+     * @param array $presets Base presets.
+     * @param array $grouped Candidates grouped by class.
+     * @return array
+     */
+    protected function resolve_quotas( $presets, $grouped ) {
+        $available = [
+            'exacta'    => isset( $grouped['exacta'] ) ? count( $grouped['exacta'] ) : 0,
+            'frase'     => isset( $grouped['frase'] ) ? count( $grouped['frase'] ) : 0,
+            'semantica' => isset( $grouped['semantica'] ) ? count( $grouped['semantica'] ) : 0,
+        ];
+
+        $quotas = [
+            'exacta'    => (int) $presets['exacta'],
+            'frase'     => (int) $presets['frase'],
+            'semantica' => (int) $presets['semantica'],
+        ];
+
+        // Exacta deficit moves to frase then semantica.
+        $deficit_exacta = max( 0, $quotas['exacta'] - $available['exacta'] );
+        if ( $deficit_exacta > 0 ) {
+            $quotas['exacta'] = $available['exacta'];
+
+            $room_frase = max( 0, $available['frase'] - $quotas['frase'] );
+            if ( $room_frase > 0 ) {
+                $transfer = min( $deficit_exacta, $room_frase );
+                $quotas['frase'] += $transfer;
+                $deficit_exacta  -= $transfer;
+            }
+
+            if ( $deficit_exacta > 0 ) {
+                $room_sem = max( 0, $available['semantica'] - $quotas['semantica'] );
+                if ( $room_sem > 0 ) {
+                    $transfer = min( $deficit_exacta, $room_sem );
+                    $quotas['semantica'] += $transfer;
+                    $deficit_exacta     -= $transfer;
+                }
+            }
+        }
+
+        // Frase deficit moves to semantica.
+        $deficit_frase = max( 0, $quotas['frase'] - $available['frase'] );
+        if ( $deficit_frase > 0 ) {
+            $quotas['frase'] = $available['frase'];
+            $room_sem        = max( 0, $available['semantica'] - $quotas['semantica'] );
+            if ( $room_sem > 0 ) {
+                $transfer = min( $deficit_frase, $room_sem );
+                $quotas['semantica'] += $transfer;
+                $deficit_frase       -= $transfer;
+            }
+        }
+
+        // Cap semantica by available anchors.
+        $quotas['semantica'] = min( $quotas['semantica'], $available['semantica'] );
+
+        $available_total = $available['exacta'] + $available['frase'] + $available['semantica'];
+        $target_total    = min( (int) $presets['total'], $available_total );
+        $current_total   = $quotas['exacta'] + $quotas['frase'] + $quotas['semantica'];
+
+        if ( $current_total > $target_total ) {
+            foreach ( [ 'semantica', 'frase', 'exacta' ] as $type ) {
+                if ( $current_total <= $target_total ) {
+                    break;
+                }
+
+                $excess = $current_total - $target_total;
+                $reduction = min( $excess, $quotas[ $type ] );
+                $quotas[ $type ] -= $reduction;
+                $current_total   -= $reduction;
+            }
+        }
+
+        if ( $current_total < $target_total ) {
+            foreach ( [ 'frase', 'semantica', 'exacta' ] as $type ) {
+                if ( $current_total >= $target_total ) {
+                    break;
+                }
+
+                $room = max( 0, $available[ $type ] - $quotas[ $type ] );
+                if ( $room <= 0 ) {
+                    continue;
+                }
+
+                $add = min( $room, $target_total - $current_total );
+                $quotas[ $type ] += $add;
+                $current_total   += $add;
+            }
+        }
+
+        return [
+            'exacta'    => (int) $quotas['exacta'],
+            'frase'     => (int) $quotas['frase'],
+            'semantica' => (int) $quotas['semantica'],
+        ];
+    }
+
+    /**
+     * Selects anchors according to resolved quotas.
+     *
+     * @param array $grouped Grouped candidates.
+     * @param array $quotas  Final quotas per class.
+     * @return array
+     */
+    protected function select_anchors( $grouped, $quotas ) {
+        $order    = [ 'exacta', 'frase', 'semantica' ];
+        $selected = [];
+
+        foreach ( $order as $type ) {
+            if ( empty( $quotas[ $type ] ) || empty( $grouped[ $type ] ) ) {
+                continue;
+            }
+
+            $slice    = array_slice( $grouped[ $type ], 0, (int) $quotas[ $type ] );
+            $selected = array_merge( $selected, $slice );
+        }
+
+        $order_map = [ 'exacta' => 0, 'frase' => 1, 'semantica' => 2 ];
+        usort(
+            $selected,
+            function ( $a, $b ) use ( $order_map ) {
+                $class_cmp = $order_map[ $a['classification'] ] <=> $order_map[ $b['classification'] ];
+                if ( 0 !== $class_cmp ) {
+                    return $class_cmp;
+                }
+
+                if ( $a['frequency'] === $b['frequency'] ) {
+                    return mb_strlen( $a['text'] ) <=> mb_strlen( $b['text'] );
+                }
+
+                return $b['frequency'] <=> $a['frequency'];
+            }
+        );
+
+        return array_map(
+            function ( $item ) {
+                return [
+                    'text'      => $item['text'],
+                    'class'     => $item['classification'],
+                    'frequency' => (int) $item['frequency'],
+                ];
+            },
+            $selected
+        );
+    }
+
+    /**
+     * Normalizes token for edge validation.
+     *
+     * @param string $token Token text.
+     * @return string
+     */
+    protected function normalize_token( $token ) {
+        $token = strtolower( remove_accents( $token ) );
+        $token = preg_replace( '/[^\p{L}0-9]+/u', '', $token );
+        return trim( $token );
+    }
+
+    /**
      * Calculates presets based on word count.
      *
      * @param int $word_count Number of words.
@@ -559,3 +786,4 @@ class SAI_Anchors {
         ];
     }
 }
+
