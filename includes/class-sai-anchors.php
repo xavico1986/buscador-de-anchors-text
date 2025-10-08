@@ -10,66 +10,77 @@ if ( ! defined( 'ABSPATH' ) ) {
 class SAI_Anchors {
 
     /**
-     * List of Spanish stopwords.
+     * List of Spanish stopwords (ampliada).
      *
      * @var array
      */
     protected $stopwords = [
-        'a', 'acá', 'ahí', 'al', 'algo', 'algunas', 'algunos', 'allí', 'allá', 'ante', 'antes', 'aquel', 'aquella',
-        'aquellas', 'aquellos', 'aqui', 'aquí', 'arriba', 'así', 'atrás', 'bajo', 'bastante', 'bien', 'cada', 'casi',
-        'como', 'con', 'contra', 'cual', 'cuales', 'cualquier', 'cualquiera', 'cualquieras', 'cuando', 'cuanto',
-        'cuanta', 'cuantas', 'cuantos', 'de', 'dejar', 'del', 'demás', 'demasiada', 'demasiadas', 'demasiado',
-        'demasiados', 'dentro', 'desde', 'donde', 'dos', 'el', 'él', 'ella', 'ellas', 'ellos', 'en', 'encima', 'entonces',
-        'entre', 'era', 'erais', 'eran', 'eras', 'eres', 'es', 'esa', 'esas', 'ese', 'eso', 'esos', 'esta', 'está', 'estaba',
-        'estabais', 'estaban', 'estabas', 'estad', 'estada', 'estadas', 'estado', 'estados', 'estamos', 'estando',
-        'estar', 'estaremos', 'estará', 'estarán', 'estarás', 'estaré', 'estaréis', 'estaría', 'estaríais', 'estaríamos',
-        'estarían', 'estarías', 'estas', 'estás', 'este', 'esto', 'estos', 'estoy', 'fin', 'fue', 'fueron', 'fui', 'fuimos',
-        'ha', 'habéis', 'haber', 'habrá', 'habrán', 'habrás', 'habré', 'habréis', 'habría', 'habríais', 'habríamos',
-        'habrían', 'habrías', 'haciendo', 'hace', 'haces', 'hacia', 'haciendo', 'han', 'hasta', 'hay', 'haya', 'hayan',
-        'hayas', 'he', 'hemos', 'hube', 'hubiera', 'hubierais', 'hubieran', 'hubieras', 'hubieron', 'hubiese', 'hubieseis',
-        'hubiesen', 'hubieses', 'hubimos', 'hubiste', 'hubisteis', 'la', 'las', 'le', 'les', 'lo', 'los', 'mas', 'más', 'me',
-        'mi', 'mis', 'mucho', 'muchos', 'muy', 'nada', 'ni', 'no', 'nos', 'nosotras', 'nosotros', 'nuestra', 'nuestras',
-        'nuestro', 'nuestros', 'o', 'os', 'otra', 'otras', 'otro', 'otros', 'para', 'pero', 'poca', 'pocas', 'poco', 'pocos',
-        'por', 'porque', 'primero', 'puede', 'pueden', 'pues', 'que', 'qué', 'querer', 'quien', 'quienes', 'se', 'sea',
-        'seas', 'ser', 'será', 'serán', 'serás', 'seré', 'seréis', 'sería', 'seríais', 'seríamos', 'serían', 'serías',
-        'si', 'sí', 'siempre', 'siendo', 'sin', 'sobre', 'sois', 'solamente', 'solo', 'sólo', 'somos', 'son', 'soy', 'su',
-        'sus', 'tal', 'tales', 'también', 'tampoco', 'tan', 'tanta', 'tantas', 'tanto', 'tantos', 'te', 'tenemos', 'tener',
-        'tengo', 'ti', 'tiene', 'tienen', 'toda', 'todas', 'todavía', 'todo', 'todos', 'tu', 'tus', 'un', 'una', 'uno',
-        'unos', 'vosotras', 'vosotros', 'y', 'ya', 'yo'
+        'a','acá','ahí','al','algo','algunas','algunos','allí','allá','ante','antes','aquel','aquella',
+        'aquellas','aquellos','aqui','aquí','arriba','así','atrás','bajo','bastante','bien','cada','casi',
+        'como','con','contra','cual','cuales','cualquier','cualquiera','cualquieras','cuando','cuanto',
+        'cuanta','cuantas','cuantos','de','dejar','del','demás','demasiada','demasiadas','demasiado',
+        'demasiados','dentro','desde','donde','dos','el','él','ella','ellas','ellos','en','encima','entonces',
+        'entre','era','erais','eran','eras','eres','es','esa','esas','ese','eso','esos','esta','está','estaba',
+        'estabais','estaban','estabas','estad','estada','estadas','estado','estados','estamos','estando',
+        'estar','estaremos','estará','estarán','estarás','estaré','estaréis','estaría','estaríais','estaríamos',
+        'estarían','estarías','estas','estás','este','esto','estos','estoy','fin','fue','fueron','fui','fuimos',
+        'ha','habéis','haber','habrá','habrán','habrás','habré','habréis','habría','habríais','habríamos',
+        'habrían','habrías','haciendo','hace','haces','hacia','han','hasta','hay','haya','hayan',
+        'hayas','he','hemos','hube','hubiera','hubierais','hubieran','hubieras','hubieron','hubiese','hubieseis',
+        'hubiesen','hubieses','hubimos','hubiste','hubisteis','la','las','le','les','lo','los','mas','más','me',
+        'mi','mis','mucho','muchos','muy','nada','ni','no','nos','nosotras','nosotros','nuestra','nuestras',
+        'nuestro','nuestros','o','os','otra','otras','otro','otros','para','pero','poca','pocas','poco','pocos',
+        'por','porque','primero','puede','pueden','pues','que','qué','querer','quien','quienes','se','sea',
+        'seas','ser','será','serán','serás','seré','seréis','sería','seríais','seríamos','serían','serías',
+        'si','sí','siempre','siendo','sin','sobre','sois','solamente','solo','sólo','somos','son','soy','su',
+        'sus','tal','tales','también','tampoco','tan','tanta','tantas','tanto','tantos','te','tenemos','tener',
+        'tengo','ti','tiene','tienen','toda','todas','todavía','todo','todos','tu','tus','un','una','uno',
+        'unos','vosotras','vosotros','y','ya','yo',
+        // añadidos suaves y frecuentes de bajo valor semántico
+        'caso','casos','tipo','tipos','segun','según','general','generales','ademas','además'
     ];
 
     /**
-     * CTA or noisy terms to exclude.
+     * CTA or noisy terms to exclude (ampliada).
      *
      * @var array
      */
     protected $cta_terms = [
-        'whatsapp', 'compra', 'comprar', 'cotiza', 'cotizar', 'precio', 'oferta', 'ofertas', 'promocion',
-        'promociones', 'promo', 'descuentos', 'clic', 'click', 'click aqui', 'haz clic', 'suscríbete', 'suscribete',
-        'registro', 'regístrate', 'registrate', 'teléfono', 'telefono', 'moldurama', 'mx', 'llámanos', 'llamanos',
-        'envíanos', 'envianos'
+        'whatsapp','compra','comprar','cotiza','cotizar','precio','oferta','ofertas','promocion',
+        'promociones','promo','descuentos','clic','click','click aqui','haz clic','suscríbete','suscribete',
+        'registro','regístrate','registrate','teléfono','telefono','moldurama','mx','llámanos','llamanos',
+        'envíanos','envianos',
+        // añadidos
+        'contacto','contáctanos','contactanos','llama','llamar','escríbenos','escribenos','gratis',
+        'envío','envio','soporte','asesor','asesoría','asesoria','catalogo','catálogo',
+        'pedido','orden','cotización','cotizacion','pago','tarjeta','carrito'
     ];
 
     /**
-     * Boilerplate phrases to discard.
+     * Boilerplate phrases to discard (ampliada).
      *
      * @var array
      */
     protected $boilerplate_phrases = [
-        'en definitiva', 'muchos casos', 'otro aspecto', 'en terminos generales', 'en términos generales',
-        'estas medidas'
+        'en definitiva','muchos casos','otro aspecto','en terminos generales','en términos generales',
+        'estas medidas',
+        // añadidos
+        'en resumen','por otro lado','por lo tanto','por consiguiente','en conclusion','en conclusión',
+        'cabe destacar'
     ];
 
     /**
-     * Low-value verbs to exclude when enforcing verb filters.
+     * Low-value verbs to exclude when enforcing verb filters (ampliada con variantes).
      *
      * @var array
      */
     protected $forbidden_verbs = [
-        'es', 'son', 'esta', 'está', 'estan', 'están', 'permite', 'permiten', 'permitir', 'ayuda', 'ayudan',
-        'ayudar', 'mejora', 'mejoran', 'mejorar', 'aumenta', 'aumentan', 'aumentar', 'resulta', 'resultan',
-        'resultar', 'reduce', 'reducen', 'reducir', 'contribuye', 'contribuyen', 'contribuir', 'representa',
-        'representan', 'representar', 'ofrece', 'ofrecen', 'ofrecer', 'utilizar', 'utiliza', 'utilizan'
+        'es','son','esta','está','estan','están','permite','permiten','permitir','ayuda','ayudan',
+        'ayudar','mejora','mejoran','mejorar','aumenta','aumentan','aumentar','resulta','resultan','resultar',
+        'reduce','reducen','reducir','contribuye','contribuyen','contribuir','representa','representan',
+        'representar','ofrece','ofrecen','ofrecer','utilizar','utiliza','utilizan',
+        // añadidos suaves
+        'garantiza','garantizan','garantizar','presenta','presentan','presentar','cuenta','contar'
     ];
 
     /**
@@ -80,11 +91,16 @@ class SAI_Anchors {
     protected $connector_words = [ 'mx', 'com', 'de', 'del', 'para', 'en' ];
 
     /**
-     * Topic core terms that must appear in anchors.
+     * Topic core terms that must appear in anchors (base y ampliada).
      *
      * @var array
      */
-    protected $core_terms = [ 'caseton', 'poliestireno', 'eps', 'unicel', 'losa', 'reticular', '40x40x20' ];
+    protected $core_terms = [
+        'caseton','poliestireno','eps','unicel','losa','reticular','40x40x20',
+        // añadidos relevantes al contexto
+        'aligerada','aligeradas','nervada','nervadas','reticulares','entrepiso','entrepisos',
+        'techo','techos','cubiertas','concreto','acero','aislamiento','termico','térmico'
+    ];
 
     /**
      * Base core terms used to seed dynamic topic detection.
@@ -92,28 +108,9 @@ class SAI_Anchors {
      * @var array
      */
     protected $core_terms_base = [
-        'poliestireno',
-        'eps',
-        'unicel',
-        'aislamiento',
-        'térmico',
-        'acústico',
-        'losa',
-        'reticular',
-        'nervada',
-        'entrepiso',
-        'techo',
-        'cubierta',
-        'hormigón',
-        'concreto',
-        'acero',
-        'vigueta',
-        'cimbra',
-        'densidad',
-        'humedad',
-        'eficiencia energética',
-        'transporte',
-        'durabilidad',
+        'poliestireno','eps','unicel','aislamiento','térmico','acústico','losa','reticular','nervada','entrepiso',
+        'techo','cubierta','hormigón','concreto','acero','vigueta','cimbra','densidad','humedad',
+        'eficiencia energética','transporte','durabilidad',
     ];
 
     /**
@@ -173,9 +170,10 @@ class SAI_Anchors {
      *
      * @param string $canonical Canonical keyword.
      * @param string $body_text Clean body text.
-     * @return array
+     * @return array|WP_Error
      */
     public function extract( $canonical, $body_text ) {
+        // reset núcleo dinámico por petición
         $this->runtime_core_terms = [];
 
         $body_text = $this->prepare_text( $body_text );
@@ -222,13 +220,14 @@ class SAI_Anchors {
         $canonical_core      = $this->canonical_core( $canonical );
         $canonical_core_norm = $this->normalize( $canonical_core );
 
+        // Construir términos core dinámicos desde canónico, título y texto.
         $maybe_title = '';
         if ( property_exists( $this, 'request_title' ) ) {
             $maybe_title = (string) $this->request_title;
         }
-
         $this->runtime_core_terms = $this->build_core_terms_dynamic( $canonical, $body_text, $maybe_title );
 
+        // Rondas de extracción con degradación controlada.
         $rounds = [
             [ 'min_window' => 2, 'max_window' => 7, 'min_frequency' => 2, 'enforce_verbs' => true ],
             [ 'min_window' => 2, 'max_window' => 8, 'min_frequency' => 2, 'enforce_verbs' => true ],
@@ -262,6 +261,7 @@ class SAI_Anchors {
                 $grouped[ $candidate['classification'] ][] = $candidate;
             }
 
+            // Si aparece el canónico literal y aún no hay "exacta", inyectarlo.
             $canonical_frequency = $this->count_frequency( $canonical, $body_text );
             if ( $canonical_frequency > 0 && empty( $grouped['exacta'] ) ) {
                 $start_position = mb_strpos( $body_text, $canonical, 0, 'UTF-8' );
@@ -286,10 +286,8 @@ class SAI_Anchors {
                             if ( 0 !== $len_compare ) {
                                 return $len_compare;
                             }
-
                             return ( $a['start'] ?? PHP_INT_MAX ) <=> ( $b['start'] ?? PHP_INT_MAX );
                         }
-
                         return $b['frequency'] <=> $a['frequency'];
                     }
                 );
@@ -301,9 +299,8 @@ class SAI_Anchors {
                 continue;
             }
 
-            $quotas  = $this->resolve_quotas( $presets, $grouped );
+            $quotas = $this->resolve_quotas( $presets, $grouped );
             if ( is_wp_error( $quotas ) ) {
-                $this->runtime_core_terms = [];
                 return $quotas;
             }
             $anchors = $this->select_anchors( $grouped, $quotas );
@@ -315,7 +312,8 @@ class SAI_Anchors {
                         $counts_actual[ $anchor['class'] ]++;
                     }
                 }
-                $result = [
+
+                return [
                     'word_count'      => $word_count,
                     'suggested_total' => count( $anchors ),
                     'quotas'          => [
@@ -326,14 +324,10 @@ class SAI_Anchors {
                     ],
                     'anchors'         => $anchors,
                 ];
-
-                $this->runtime_core_terms = [];
-
-                return $result;
             }
         }
 
-        $error = new WP_Error(
+        return new WP_Error(
             'sai_no_candidates',
             __( 'No hay suficientes frases válidas para cubrir las cuotas SEO sin violar las reglas (exacta/frase/semántica).', 'anchors-sin-ia' ),
             [
@@ -341,10 +335,6 @@ class SAI_Anchors {
                 'word_count' => $word_count,
             ]
         );
-
-        $this->runtime_core_terms = [];
-
-        return $error;
     }
 
     /**
@@ -381,7 +371,7 @@ class SAI_Anchors {
      * @return string
      */
     protected function canonical_core( $canonical ) {
-        $tokens = preg_split( '/\s+/u', strtolower( remove_accents( $canonical ) ) );
+        $tokens   = preg_split( '/\s+/u', strtolower( remove_accents( $canonical ) ) );
         $filtered = array_diff( $tokens, $this->connector_words );
         $filtered = array_filter( $filtered );
         return implode( ' ', $filtered );
@@ -417,7 +407,7 @@ class SAI_Anchors {
             $terms[] = $canonical_norm;
         }
 
-        $canonical_core = $this->canonical_core( $canonical );
+        $canonical_core      = $this->canonical_core( $canonical );
         $canonical_core_norm = $this->normalize( $canonical_core );
         if ( '' !== $canonical_core_norm ) {
             $terms[] = $canonical_core_norm;
@@ -439,13 +429,12 @@ class SAI_Anchors {
         }
 
         if ( '' !== $title_source ) {
-            $title_norm    = $this->normalize( $title_source );
-            $title_tokens  = array_filter( preg_split( '/\s+/u', $title_norm ) );
+            $title_norm   = $this->normalize( $title_source );
+            $title_tokens = array_filter( preg_split( '/\s+/u', $title_norm ) );
             foreach ( $title_tokens as $token ) {
                 if ( '' === $token || in_array( $token, $this->stopwords, true ) ) {
                     continue;
                 }
-
                 $terms[] = $token;
             }
         }
@@ -499,7 +488,6 @@ class SAI_Anchors {
             if ( '' === $normalized ) {
                 continue;
             }
-
             $tokens[] = $normalized;
         }
 
@@ -570,10 +558,8 @@ class SAI_Anchors {
                     if ( $a['length'] === $b['length'] ) {
                         return $a['start'] <=> $b['start'];
                     }
-
                     return $a['length'] <=> $b['length'];
                 }
-
                 return $b['frequency'] <=> $a['frequency'];
             }
         );
@@ -613,6 +599,13 @@ class SAI_Anchors {
         return $tokens;
     }
 
+    /**
+     * Convert byte offset (from preg_match_all) to char position for mb_substr.
+     *
+     * @param string $text
+     * @param int    $byte_offset
+     * @return int
+     */
     protected function char_pos_from_byte_offset( $text, $byte_offset ) {
         return mb_strlen( substr( $text, 0, $byte_offset ), 'UTF-8' );
     }
@@ -668,21 +661,24 @@ class SAI_Anchors {
      *
      * @param array  $candidate Candidate data.
      * @param string $canonical_core_norm Normalized canonical core.
+     * @param bool   $enforce_verbs Whether to filter low-value verbs.
      * @return bool
      */
     protected function is_candidate_valid( $candidate, $canonical_core_norm, $enforce_verbs = true ) {
-        $text = $candidate['text'];
+        $text       = $candidate['text'];
         $normalized = $this->normalize( $text );
 
         if ( '' === $normalized ) {
             return false;
         }
 
+        // Evitar puntuación interna y comillas/guiones tipográficos.
         if ( preg_match( "/[\\.,;:\"'()\\[\\]{}<>]/u", $text ) ) {
             return false;
         }
-
-        if ( false !== mb_strpos( $text, '“' ) || false !== mb_strpos( $text, '”' ) || false !== mb_strpos( $text, '«' ) || false !== mb_strpos( $text, '»' ) || false !== mb_strpos( $text, '—' ) || false !== mb_strpos( $text, '–' ) ) {
+        if ( false !== mb_strpos( $text, '“' ) || false !== mb_strpos( $text, '”' ) ||
+             false !== mb_strpos( $text, '«' ) || false !== mb_strpos( $text, '»' ) ||
+             false !== mb_strpos( $text, '—' ) || false !== mb_strpos( $text, '–' ) ) {
             return false;
         }
 
@@ -729,21 +725,22 @@ class SAI_Anchors {
             }
         }
 
+        // Teléfonos y precios.
         if ( preg_match( '/\b\d{2,}\b/', $text ) && preg_match( '/\b\d{7,}\b/', $text ) ) {
-            // Likely a phone number.
             return false;
         }
-
         if ( preg_match( '/[\d\.,]+\s?(%|usd|mxn|eur|\$)/iu', $text ) ) {
             return false;
         }
 
+        // Dominios
         if ( preg_match( '/\.[a-z]{2,}/iu', $text ) ) {
             if ( preg_match( '/\b[a-z0-9.-]+\.(com|mx|net|org|biz|info|edu|gob)(?:\.[a-z]{2})?\b/iu', $text ) ) {
                 return false;
             }
         }
 
+        // Borde no debe ser stopword.
         $first_token = $candidate['tokens'][0]['token'];
         $last_token  = $candidate['tokens'][ count( $candidate['tokens'] ) - 1 ]['token'];
         $first_norm  = $this->normalize_token( $first_token );
@@ -752,11 +749,11 @@ class SAI_Anchors {
         if ( '' === $first_norm || in_array( $first_norm, $this->stopwords, true ) ) {
             return false;
         }
-
         if ( '' === $last_norm || in_array( $last_norm, $this->stopwords, true ) ) {
             return false;
         }
 
+        // Filtrar verbos de bajo valor si se exige.
         if ( $enforce_verbs ) {
             foreach ( $tokens_norm as $token ) {
                 if ( in_array( $token, $this->forbidden_verbs, true ) ) {
@@ -765,17 +762,25 @@ class SAI_Anchors {
             }
         }
 
-        $core_terms = ! empty( $this->runtime_core_terms ) ? $this->runtime_core_terms : $this->core_terms;
+        // Debe contener núcleo temático (dinámico) o tokens del canónico.
         $contains_core = false;
+
+        $core_terms = ! empty( $this->runtime_core_terms ) ? $this->runtime_core_terms : $this->core_terms;
         foreach ( $core_terms as $term ) {
             $term_norm = $this->normalize( $term );
-            if ( '' === $term_norm ) {
-                continue;
-            }
-
-            if ( false !== mb_strpos( $normalized, $term_norm, 0, 'UTF-8' ) ) {
+            if ( '' !== $term_norm && false !== mb_strpos( $normalized, $term_norm, 0, 'UTF-8' ) ) {
                 $contains_core = true;
                 break;
+            }
+        }
+
+        if ( ! $contains_core && '' !== $canonical_core_norm ) {
+            $canonical_tokens = preg_split( '/\s+/u', $canonical_core_norm );
+            foreach ( $canonical_tokens as $core_token ) {
+                if ( '' !== $core_token && false !== strpos( $normalized, $core_token ) ) {
+                    $contains_core = true;
+                    break;
+                }
             }
         }
 
@@ -828,6 +833,7 @@ class SAI_Anchors {
             }
 
             $classification = $this->classify_candidate( $candidate['text'], $canonical_norm, $canonical_core_norm );
+
             $candidate['classification'] = $classification;
             $candidate['frequency']      = $frequency;
             $valid[]                     = $candidate;
@@ -992,7 +998,7 @@ class SAI_Anchors {
      *
      * @param array $presets Base presets.
      * @param array $grouped Candidates grouped by class.
-     * @return array
+     * @return array|WP_Error
      */
     protected function resolve_quotas( $presets, $grouped ) {
         $available = [
@@ -1063,7 +1069,6 @@ class SAI_Anchors {
                     if ( 0 !== $len_compare ) {
                         return $len_compare;
                     }
-
                     return ( $a['start'] ?? PHP_INT_MAX ) <=> ( $b['start'] ?? PHP_INT_MAX );
                 }
 
@@ -1128,3 +1133,4 @@ class SAI_Anchors {
         ];
     }
 }
+
