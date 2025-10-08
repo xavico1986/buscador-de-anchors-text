@@ -1,0 +1,183 @@
+#sai-app {
+    margin-top: 20px;
+}
+
+.sai-search {
+    background: #fff;
+    border: 1px solid #dcdcde;
+    padding: 20px;
+    border-radius: 4px;
+}
+
+.sai-search-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-end;
+}
+
+.sai-label {
+    display: flex;
+    flex-direction: column;
+    font-weight: 600;
+}
+
+.sai-label input {
+    margin-top: 6px;
+    min-width: 280px;
+    padding: 6px 8px;
+}
+
+.sai-search-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.sai-checkbox {
+    display: flex;
+    align-items: center;
+    font-weight: 500;
+}
+
+.sai-checkbox input {
+    margin-right: 6px;
+}
+
+.sai-results {
+    margin-top: 20px;
+    display: grid;
+    gap: 12px;
+}
+
+.sai-result {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    background: #f9f9f9;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.sai-result-info h3 {
+    margin: 0 0 6px;
+    font-size: 16px;
+}
+
+.sai-result-meta {
+    margin: 0;
+    color: #555d66;
+    font-size: 13px;
+}
+
+.sai-result-actions .button {
+    margin-left: 6px;
+}
+
+.sai-status {
+    margin: 16px 0;
+    color: #555d66;
+}
+
+.sai-pagination {
+    margin-top: 16px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.sai-pagination span {
+    font-weight: 600;
+}
+
+.sai-detail {
+    background: #fff;
+    border: 1px solid #dcdcde;
+    padding: 20px;
+    border-radius: 4px;
+}
+
+.sai-detail-header {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.sai-detail-columns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    margin-top: 16px;
+}
+
+.sai-detail-left {
+    flex: 1 1 240px;
+    background: #f6f7f7;
+    border: 1px solid #dcdcde;
+    padding: 16px;
+    border-radius: 4px;
+}
+
+.sai-detail-left p {
+    margin: 0 0 12px;
+}
+
+.sai-detail-right {
+    flex: 2 1 420px;
+}
+
+.sai-body-text {
+    width: 100%;
+    min-height: 240px;
+    resize: vertical;
+    margin: 12px 0;
+}
+
+.sai-table-wrapper {
+    margin-top: 16px;
+    max-height: 320px;
+    overflow: auto;
+}
+
+.sai-notice {
+    margin: 16px 0;
+    padding: 12px 16px;
+    border-left: 4px solid;
+    border-radius: 3px;
+}
+
+.sai-notice-success {
+    background: #f0f6f0;
+    border-color: #46b450;
+    color: #205522;
+}
+
+.sai-notice-error {
+    background: #fbeaea;
+    border-color: #dc3232;
+    color: #8a1f1f;
+}
+
+@media (max-width: 782px) {
+    .sai-search-actions {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .sai-result {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .sai-result-actions .button {
+        margin-left: 0;
+        margin-right: 6px;
+    }
+
+    .sai-detail-header {
+        justify-content: flex-start;
+        margin-bottom: 12px;
+    }
+}
