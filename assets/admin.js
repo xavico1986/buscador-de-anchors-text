@@ -62,7 +62,7 @@
             }
             return String(text)
                 .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
+                .replace(/</g, '&lt;/g, '&gt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
@@ -361,8 +361,7 @@
             })
                 .then(handleFetchResponse)
                 .then(function (data) {
-                    // ACEPTAMOS TUS CAMBIOS: si el backend devolvió word_count actualizado,
-                    // reflejamos ese valor en la vista sin perder el resto de campos.
+                    // Si el backend devolvió word_count actualizado, reflejarlo.
                     var updatedDetail = state.postDetail ? JSON.parse(JSON.stringify(state.postDetail)) : null;
                     if (updatedDetail && typeof data.word_count === 'number') {
                         updatedDetail.word_count = data.word_count;

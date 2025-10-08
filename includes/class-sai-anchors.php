@@ -329,16 +329,25 @@ class SAI_Anchors {
     }
 
     /**
+     * Convert byte offset (from preg_match_all) to char position for mb_substr.
+     *
+     * @param string $text
+     * @param int    $byte_offset
+     * @return int
+     */
+    protected function char_pos_from_byte_offset( $text, $byte_offset ) {
+        return mb_strlen( substr( $text, 0, $byte_offset ), 'UTF-8' );
+    }
+
+    /**
      * Generates candidate anchors from tokens.
      *
      * @param array  $tokens Tokens with positions.
      * @param string $text   Full text.
-     * @param int    $min_window Minimum tokens.
-     * @param int    $max_window Maximum tokens.
      * @return array
      */
     protected function generate_candidates( $tokens, $text, $min_window = 2, $max_window = 7 ) {
-        $candidates = [];
+        $candidates  = [];
         $token_count = count( $tokens );
 
         for ( $i = 0; $i < $token_count; $i++ ) {
@@ -348,12 +357,18 @@ class SAI_Anchors {
                     break;
                 }
 
-                $start = $tokens[ $i ]['offset'];
-                $end_token = $tokens[ $end_index ];
-                $end = $end_token['offset'] + $end_token['length'];
-                $substr = mb_substr( $text, $start, $end - $start );
+                // Offsets en bytes (de preg_match_all)
+                $start_byte = $tokens[ $i ]['offset'];
+                $end_token  = $tokens[ $end_index ];
+                $end_byte   = $end_token['offset'] + strlen( $end_token['token'] );
+
+                // Convertir a posiciones en caracteres (para mb_substr)
+                $start_char = $this->char_pos_from_byte_offset( $text, $start_byte );
+                $end_char   = $this->char_pos_from_byte_offset( $text, $end_byte );
+
+                $substr = mb_substr( $text, $start_char, $end_char - $start_char, 'UTF-8' );
                 $substr = $this->prepare_text( $substr );
-                $length = mb_strlen( $substr );
+                $length = mb_strlen( $substr, 'UTF-8' );
 
                 if ( $length < 6 || $length > 80 ) {
                     continue;
