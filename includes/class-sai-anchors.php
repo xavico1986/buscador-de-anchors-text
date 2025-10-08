@@ -61,6 +61,18 @@ class SAI_Anchors {
     ];
 
     /**
+     * Low-value verbs to exclude when enforcing verb filters.
+     *
+     * @var array
+     */
+    protected $forbidden_verbs = [
+        'es', 'son', 'esta', 'está', 'estan', 'están', 'permite', 'permiten', 'permitir', 'ayuda', 'ayudan',
+        'ayudar', 'mejora', 'mejoran', 'mejorar', 'reduce', 'reducen', 'reducir', 'contribuye', 'contribuyen',
+        'contribuir', 'representa', 'representan', 'representar', 'ofrece', 'ofrecen', 'ofrecer', 'utilizar',
+        'utiliza', 'utilizan'
+    ];
+
+    /**
      * Connector or brand words for canonical core.
      *
      * @var array
@@ -117,7 +129,7 @@ class SAI_Anchors {
      *
      * @param string $canonical Canonical keyword.
      * @param string $body_text Clean body text.
-     * @return array
+     * @return array|WP_Error
      */
     public function extract( $canonical, $body_text ) {
         $body_text = $this->prepare_text( $body_text );
@@ -126,88 +138,129 @@ class SAI_Anchors {
         $word_count = $this->get_word_count( $body_text );
         $presets    = $this->get_presets( $word_count );
 
-        $response = [
-            'word_count'      => $word_count,
-            'suggested_total' => 0,
-            'quotas'          => [ 'total' => 0, 'exacta' => 0, 'frase' => 0, 'semantica' => 0 ],
-            'anchors'         => [],
-        ];
-
-        if ( '' === $body_text || '' === $canonical ) {
-            return $response;
+        if ( '' === $canonical ) {
+            return new WP_Error(
+                'sai_missing_canonical',
+                __( 'La palabra canónica es obligatoria.', 'anchors-sin-ia' ),
+                [
+                    'status'     => 400,
+                    'word_count' => $word_count,
+                ]
+            );
         }
 
-        $tokens                 = $this->tokenize_with_positions( $body_text );
-        $canonical_norm         = $this->normalize( $canonical );
-        $canonical_core         = $this->canonical_core( $canonical );
-        $canonical_core_norm    = $this->normalize( $canonical_core );
+        if ( '' === $body_text ) {
+            return new WP_Error(
+                'sai_empty_body',
+                __( 'El cuerpo del contenido está vacío tras la limpieza.', 'anchors-sin-ia' ),
+                [
+                    'status'     => 400,
+                    'word_count' => $word_count,
+                ]
+            );
+        }
 
-        $valid_candidates = $this->collect_valid_candidates(
-            $tokens,
-            $body_text,
-            $canonical_norm,
-            $canonical_core_norm,
-            2,
-            7
-        );
+        $tokens = $this->tokenize_with_positions( $body_text );
+        if ( empty( $tokens ) ) {
+            return new WP_Error(
+                'sai_no_tokens',
+                __( 'No hay suficientes términos para generar anchors válidos.', 'anchors-sin-ia' ),
+                [
+                    'status'     => 400,
+                    'word_count' => $word_count,
+                ]
+            );
+        }
 
-        if ( count( $valid_candidates ) < $presets['total'] ) {
-            $additional = $this->collect_valid_candidates(
+        $canonical_norm      = $this->normalize( $canonical );
+        $canonical_core      = $this->canonical_core( $canonical );
+        $canonical_core_norm = $this->normalize( $canonical_core );
+
+        // Rondas de extracción con degradación controlada.
+        $rounds = [
+            [ 'min_window' => 2, 'max_window' => 7, 'min_frequency' => 2, 'enforce_verbs' => true ],
+            [ 'min_window' => 2, 'max_window' => 8, 'min_frequency' => 2, 'enforce_verbs' => true ],
+            [ 'min_window' => 2, 'max_window' => 8, 'min_frequency' => 1, 'enforce_verbs' => true ],
+            [ 'min_window' => 2, 'max_window' => 8, 'min_frequency' => 1, 'enforce_verbs' => false ],
+        ];
+
+        $candidates   = [];
+        $target_total = (int) $presets['total'];
+
+        foreach ( $rounds as $round ) {
+            $new_candidates = $this->collect_valid_candidates(
                 $tokens,
                 $body_text,
                 $canonical_norm,
                 $canonical_core_norm,
-                2,
-                8,
-                $valid_candidates
+                $round,
+                $candidates
             );
-            $valid_candidates = $this->merge_candidate_lists( $valid_candidates, $additional );
-        }
 
-        if ( empty( $valid_candidates ) ) {
-            return $response;
-        }
+            $candidates = $this->merge_candidate_lists( $candidates, $new_candidates );
 
-        $deduped = $this->deduplicate_candidates( $valid_candidates );
+            if ( empty( $candidates ) ) {
+                continue;
+            }
 
-        $grouped = [ 'exacta' => [], 'frase' => [], 'semantica' => [] ];
-        foreach ( $deduped as $candidate ) {
-            $grouped[ $candidate['classification'] ][] = $candidate;
-        }
+            $deduped = $this->deduplicate_candidates( $candidates );
 
-        foreach ( $grouped as &$items ) {
-            usort(
-                $items,
-                function ( $a, $b ) {
-                    if ( $a['frequency'] === $b['frequency'] ) {
-                        return mb_strlen( $a['text'] ) <=> mb_strlen( $b['text'] );
+            $grouped = [ 'exacta' => [], 'frase' => [], 'semantica' => [] ];
+            foreach ( $deduped as $candidate ) {
+                $grouped[ $candidate['classification'] ][] = $candidate;
+            }
+
+            foreach ( $grouped as &$items ) {
+                usort(
+                    $items,
+                    function ( $a, $b ) {
+                        if ( $a['frequency'] === $b['frequency'] ) {
+                            return mb_strlen( $a['text'] ) <=> mb_strlen( $b['text'] );
+                        }
+                        return $b['frequency'] <=> $a['frequency'];
                     }
-                    return $b['frequency'] <=> $a['frequency'];
+                );
+            }
+            unset( $items );
+
+            $available_total = count( $grouped['exacta'] ) + count( $grouped['frase'] ) + count( $grouped['semantica'] );
+            if ( $available_total < $target_total ) {
+                continue;
+            }
+
+            $quotas  = $this->resolve_quotas( $presets, $grouped );
+            $anchors = $this->select_anchors( $grouped, $quotas );
+
+            if ( count( $anchors ) === $target_total ) {
+                $counts_actual = [ 'exacta' => 0, 'frase' => 0, 'semantica' => 0 ];
+                foreach ( $anchors as $anchor ) {
+                    if ( isset( $counts_actual[ $anchor['class'] ] ) ) {
+                        $counts_actual[ $anchor['class'] ]++;
+                    }
                 }
-            );
-        }
-        unset( $items );
 
-        $quotas  = $this->resolve_quotas( $presets, $grouped );
-        $anchors = $this->select_anchors( $grouped, $quotas );
-
-        $counts_actual = [ 'exacta' => 0, 'frase' => 0, 'semantica' => 0 ];
-        foreach ( $anchors as $anchor ) {
-            if ( isset( $counts_actual[ $anchor['class'] ] ) ) {
-                $counts_actual[ $anchor['class'] ]++;
+                return [
+                    'word_count'      => $word_count,
+                    'suggested_total' => count( $anchors ),
+                    'quotas'          => [
+                        'total'     => count( $anchors ),
+                        'exacta'    => $counts_actual['exacta'],
+                        'frase'     => $counts_actual['frase'],
+                        'semantica' => $counts_actual['semantica'],
+                    ],
+                    'anchors'         => $anchors,
+                ];
             }
         }
 
-        $quotas['exacta']    = $counts_actual['exacta'];
-        $quotas['frase']     = $counts_actual['frase'];
-        $quotas['semantica'] = $counts_actual['semantica'];
-        $quotas['total']     = count( $anchors );
-
-        $response['anchors']         = $anchors;
-        $response['quotas']          = $quotas;
-        $response['suggested_total'] = count( $anchors );
-
-        return $response;
+        return new WP_Error(
+            'sai_no_candidates',
+            __( 'No hay suficientes frases válidas en el cuerpo para cubrir las cuotas sin romper reglas de calidad', 'anchors-sin-ia' ),
+            [
+                'status'     => 400,
+                'word_count' => $word_count,
+            ]
+        );
     }
 
     /**
@@ -321,13 +374,25 @@ class SAI_Anchors {
      *
      * @param array  $candidate Candidate data.
      * @param string $canonical_core_norm Normalized canonical core.
+     * @param bool   $enforce_verbs Whether to filter low-value verbs.
      * @return bool
      */
-    protected function is_candidate_valid( $candidate, $canonical_core_norm ) {
+    protected function is_candidate_valid( $candidate, $canonical_core_norm, $enforce_verbs = true ) {
         $text = $candidate['text'];
         $normalized = $this->normalize( $text );
 
         if ( '' === $normalized ) {
+            return false;
+        }
+
+        // Evitar puntuación interna y comillas/guiones tipográficos.
+        if ( preg_match( "/[\\.,;:\"'()\\[\\]{}<>]/u", $text ) ) {
+            return false;
+        }
+        if ( false !== mb_strpos( $text, '“' ) || false !== mb_strpos( $text, '”' ) || false !== mb_strpos( $text, '«' ) || false !== mb_strpos( $text, '»' ) || false !== mb_strpos( $text, '—' ) || false !== mb_strpos( $text, '–' ) ) {
+            return false;
+        }
+        if ( false !== strpos( $text, '%' ) ) {
             return false;
         }
 
@@ -370,21 +435,20 @@ class SAI_Anchors {
             }
         }
 
+        // Teléfonos, precios, dominios.
         if ( preg_match( '/\b\d{2,}\b/', $text ) && preg_match( '/\b\d{7,}\b/', $text ) ) {
-            // Likely a phone number.
             return false;
         }
-
         if ( preg_match( '/[\d\.,]+\s?(%|usd|mxn|eur|\$)/iu', $text ) ) {
             return false;
         }
-
         if ( preg_match( '/\.[a-z]{2,}/iu', $text ) ) {
             if ( preg_match( '/\b[a-z0-9.-]+\.(com|mx|net|org|biz|info|edu|gob)(?:\.[a-z]{2})?\b/iu', $text ) ) {
                 return false;
             }
         }
 
+        // Borde no debe ser stopword.
         $first_token = $candidate['tokens'][0]['token'];
         $last_token  = $candidate['tokens'][ count( $candidate['tokens'] ) - 1 ]['token'];
         $first_norm  = $this->normalize_token( $first_token );
@@ -393,11 +457,20 @@ class SAI_Anchors {
         if ( '' === $first_norm || in_array( $first_norm, $this->stopwords, true ) ) {
             return false;
         }
-
         if ( '' === $last_norm || in_array( $last_norm, $this->stopwords, true ) ) {
             return false;
         }
 
+        // Filtrar verbos de bajo valor si se exige.
+        if ( $enforce_verbs ) {
+            foreach ( $tokens_norm as $token ) {
+                if ( in_array( $token, $this->forbidden_verbs, true ) ) {
+                    return false;
+                }
+            }
+        }
+
+        // Debe contener núcleo temático o canónico.
         $contains_core = false;
         foreach ( $this->core_terms as $term ) {
             if ( false !== strpos( $normalized, $term ) ) {
@@ -430,17 +503,22 @@ class SAI_Anchors {
      * @param string $text   Body text.
      * @param string $canonical_norm Normalized canonical.
      * @param string $canonical_core_norm Normalized canonical core.
-     * @param int    $min_window Minimum tokens.
-     * @param int    $max_window Maximum tokens.
+     * @param array  $options  Extraction options (min_window, max_window, min_frequency, enforce_verbs).
      * @param array  $existing Already accepted candidates.
      * @return array
      */
-    protected function collect_valid_candidates( $tokens, $text, $canonical_norm, $canonical_core_norm, $min_window, $max_window, $existing = [] ) {
+    protected function collect_valid_candidates( $tokens, $text, $canonical_norm, $canonical_core_norm, $options, $existing = [] ) {
+        $min_window     = isset( $options['min_window'] ) ? max( 2, (int) $options['min_window'] ) : 2;
+        $max_window     = isset( $options['max_window'] ) ? max( $min_window, (int) $options['max_window'] ) : 7;
+        $min_frequency  = isset( $options['min_frequency'] ) ? max( 1, (int) $options['min_frequency'] ) : 1;
+        $enforce_verbs  = isset( $options['enforce_verbs'] ) ? (bool) $options['enforce_verbs'] : true;
         $raw_candidates = $this->generate_candidates( $tokens, $text, $min_window, $max_window );
-        $existing_texts = [];
 
+        $existing_texts = [];
         foreach ( $existing as $candidate ) {
-            $existing_texts[ $candidate['text'] ] = true;
+            if ( isset( $candidate['text'] ) ) {
+                $existing_texts[ $candidate['text'] ] = true;
+            }
         }
 
         $valid = [];
@@ -450,16 +528,16 @@ class SAI_Anchors {
                 continue;
             }
 
-            if ( ! $this->is_candidate_valid( $candidate, $canonical_core_norm ) ) {
+            if ( ! $this->is_candidate_valid( $candidate, $canonical_core_norm, $enforce_verbs ) ) {
+                continue;
+            }
+
+            $frequency = $this->count_frequency( $candidate['text'], $text );
+            if ( $frequency < $min_frequency ) {
                 continue;
             }
 
             $classification = $this->classify_candidate( $candidate['text'], $canonical_norm, $canonical_core_norm );
-            $frequency      = $this->count_frequency( $candidate['text'], $text );
-
-            if ( $frequency < 1 ) {
-                continue;
-            }
 
             $candidate['classification'] = $classification;
             $candidate['frequency']      = $frequency;
@@ -549,11 +627,13 @@ class SAI_Anchors {
         }
 
         $pattern = '/(?<![\p{L}\p{N}])' . preg_quote( $anchor_text, '/' ) . '(?![\p{L}\p{N}])/u';
-        if ( preg_match_all( $pattern, $text, $matches ) ) {
-            return count( $matches[0] );
+        $matches = preg_match_all( $pattern, $text, $results );
+        if ( false !== $matches && $matches > 0 ) {
+            return (int) $matches;
         }
 
-        return 0;
+        $fallback = substr_count( $text, $anchor_text );
+        return (int) $fallback;
     }
 
     /**
