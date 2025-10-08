@@ -129,7 +129,7 @@ class SAI_Anchors {
      *
      * @param string $canonical Canonical keyword.
      * @param string $body_text Clean body text.
-     * @return array
+     * @return array|WP_Error
      */
     public function extract( $canonical, $body_text ) {
         $body_text = $this->prepare_text( $body_text );
@@ -176,6 +176,7 @@ class SAI_Anchors {
         $canonical_core      = $this->canonical_core( $canonical );
         $canonical_core_norm = $this->normalize( $canonical_core );
 
+        // Rondas de extracción con degradación controlada.
         $rounds = [
             [ 'min_window' => 2, 'max_window' => 7, 'min_frequency' => 2, 'enforce_verbs' => true ],
             [ 'min_window' => 2, 'max_window' => 8, 'min_frequency' => 2, 'enforce_verbs' => true ],
@@ -216,7 +217,6 @@ class SAI_Anchors {
                         if ( $a['frequency'] === $b['frequency'] ) {
                             return mb_strlen( $a['text'] ) <=> mb_strlen( $b['text'] );
                         }
-
                         return $b['frequency'] <=> $a['frequency'];
                     }
                 );
@@ -328,6 +328,13 @@ class SAI_Anchors {
         return $tokens;
     }
 
+    /**
+     * Convert byte offset (from preg_match_all) to char position for mb_substr.
+     *
+     * @param string $text
+     * @param int    $byte_offset
+     * @return int
+     */
     protected function char_pos_from_byte_offset( $text, $byte_offset ) {
         return mb_strlen( substr( $text, 0, $byte_offset ), 'UTF-8' );
     }
@@ -382,6 +389,7 @@ class SAI_Anchors {
      *
      * @param array  $candidate Candidate data.
      * @param string $canonical_core_norm Normalized canonical core.
+     * @param bool   $enforce_verbs Whether to filter low-value verbs.
      * @return bool
      */
     protected function is_candidate_valid( $candidate, $canonical_core_norm, $enforce_verbs = true ) {
@@ -392,14 +400,13 @@ class SAI_Anchors {
             return false;
         }
 
+        // Evitar puntuación interna y comillas/guiones tipográficos.
         if ( preg_match( "/[\\.,;:\"'()\\[\\]{}<>]/u", $text ) ) {
             return false;
         }
-
         if ( false !== mb_strpos( $text, '“' ) || false !== mb_strpos( $text, '”' ) || false !== mb_strpos( $text, '«' ) || false !== mb_strpos( $text, '»' ) || false !== mb_strpos( $text, '—' ) || false !== mb_strpos( $text, '–' ) ) {
             return false;
         }
-
         if ( false !== strpos( $text, '%' ) ) {
             return false;
         }
@@ -443,21 +450,20 @@ class SAI_Anchors {
             }
         }
 
+        // Teléfonos, precios, dominios.
         if ( preg_match( '/\b\d{2,}\b/', $text ) && preg_match( '/\b\d{7,}\b/', $text ) ) {
-            // Likely a phone number.
             return false;
         }
-
         if ( preg_match( '/[\d\.,]+\s?(%|usd|mxn|eur|\$)/iu', $text ) ) {
             return false;
         }
-
         if ( preg_match( '/\.[a-z]{2,}/iu', $text ) ) {
             if ( preg_match( '/\b[a-z0-9.-]+\.(com|mx|net|org|biz|info|edu|gob)(?:\.[a-z]{2})?\b/iu', $text ) ) {
                 return false;
             }
         }
 
+        // Borde no debe ser stopword.
         $first_token = $candidate['tokens'][0]['token'];
         $last_token  = $candidate['tokens'][ count( $candidate['tokens'] ) - 1 ]['token'];
         $first_norm  = $this->normalize_token( $first_token );
@@ -466,11 +472,11 @@ class SAI_Anchors {
         if ( '' === $first_norm || in_array( $first_norm, $this->stopwords, true ) ) {
             return false;
         }
-
         if ( '' === $last_norm || in_array( $last_norm, $this->stopwords, true ) ) {
             return false;
         }
 
+        // Filtrar verbos de bajo valor si se exige.
         if ( $enforce_verbs ) {
             foreach ( $tokens_norm as $token ) {
                 if ( in_array( $token, $this->forbidden_verbs, true ) ) {
@@ -479,6 +485,7 @@ class SAI_Anchors {
             }
         }
 
+        // Debe contener núcleo temático o canónico.
         $contains_core = false;
         foreach ( $this->core_terms as $term ) {
             if ( false !== strpos( $normalized, $term ) ) {
@@ -546,6 +553,7 @@ class SAI_Anchors {
             }
 
             $classification = $this->classify_candidate( $candidate['text'], $canonical_norm, $canonical_core_norm );
+
             $candidate['classification'] = $classification;
             $candidate['frequency']      = $frequency;
             $valid[]                     = $candidate;
@@ -873,3 +881,4 @@ class SAI_Anchors {
         ];
     }
 }
+
