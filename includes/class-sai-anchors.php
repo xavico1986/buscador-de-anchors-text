@@ -137,15 +137,30 @@ class SAI_Anchors {
             return $response;
         }
 
-        $tokens               = $this->tokenize_with_positions( $body_text );
-        $canonical_norm        = $this->normalize( $canonical );
-        $canonical_core        = $this->canonical_core( $canonical );
-        $canonical_core_norm   = $this->normalize( $canonical_core );
+        $tokens                 = $this->tokenize_with_positions( $body_text );
+        $canonical_norm         = $this->normalize( $canonical );
+        $canonical_core         = $this->canonical_core( $canonical );
+        $canonical_core_norm    = $this->normalize( $canonical_core );
 
-        $valid_candidates = $this->collect_valid_candidates( $tokens, $body_text, $canonical_norm, $canonical_core_norm, 2, 7 );
+        $valid_candidates = $this->collect_valid_candidates(
+            $tokens,
+            $body_text,
+            $canonical_norm,
+            $canonical_core_norm,
+            2,
+            7
+        );
 
         if ( count( $valid_candidates ) < $presets['total'] ) {
-            $additional = $this->collect_valid_candidates( $tokens, $body_text, $canonical_norm, $canonical_core_norm, 2, 8, $valid_candidates );
+            $additional = $this->collect_valid_candidates(
+                $tokens,
+                $body_text,
+                $canonical_norm,
+                $canonical_core_norm,
+                2,
+                8,
+                $valid_candidates
+            );
             $valid_candidates = $this->merge_candidate_lists( $valid_candidates, $additional );
         }
 
@@ -167,7 +182,6 @@ class SAI_Anchors {
                     if ( $a['frequency'] === $b['frequency'] ) {
                         return mb_strlen( $a['text'] ) <=> mb_strlen( $b['text'] );
                     }
-
                     return $b['frequency'] <=> $a['frequency'];
                 }
             );
@@ -266,6 +280,8 @@ class SAI_Anchors {
      *
      * @param array  $tokens Tokens with positions.
      * @param string $text   Full text.
+     * @param int    $min_window Minimum tokens.
+     * @param int    $max_window Maximum tokens.
      * @return array
      */
     protected function generate_candidates( $tokens, $text, $min_window = 2, $max_window = 7 ) {
@@ -770,3 +786,4 @@ class SAI_Anchors {
         ];
     }
 }
+
