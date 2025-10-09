@@ -256,23 +256,23 @@
                 render();
                 return;
             }
+
+            // Tomar canónico desde input o, si está vacío, desde la búsqueda actual
+            var search = uiState.searches.madre;
             var canonical = (uiState.canonicalInput || '').trim();
             if (!canonical) {
                 canonical = (search.keyword || '').trim();
             }
-
             if (!canonical) {
                 setNotice(i18n.keywordLabel || 'Introduce una palabra clave.', 'error');
                 render();
                 return;
             }
-
             uiState.canonicalInput = canonical;
 
             uiState.loading = true;
             render();
 
-            var search = uiState.searches.madre;
             var payload = {
                 id: selected,
                 canonical: canonical,
@@ -821,3 +821,4 @@
         render();
     });
 })();
+
