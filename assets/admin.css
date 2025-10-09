@@ -181,3 +181,109 @@
         margin-bottom: 12px;
     }
 }
+
+/* ===== LinkBuilder (flujo madre → hijas → nietas) ===== */
+
+#sai-linkbuilder-app {
+    margin-top: 20px;
+}
+
+.sai-lb-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.sai-lb-steps {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    gap: 12px;
+}
+
+.sai-lb-step-item {
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: #f3f4f5;
+    cursor: pointer;
+    font-weight: 600;
+    border: 1px solid transparent;
+}
+
+.sai-lb-step-item.is-active {
+    background: #2271b1;
+    color: #fff;
+}
+
+.sai-lb-step-item.is-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.sai-lb-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.sai-lb-step-content .sai-search,
+.sai-lb-step-content .sai-results,
+.sai-lb-step-content .sai-summary {
+    margin-bottom: 16px;
+}
+
+.sai-canonical-field {
+    margin-top: 12px;
+}
+
+.sai-step-actions {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-top: 16px;
+}
+
+.sai-summary-card {
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 12px;
+    background: #fff;
+}
+
+.sai-anchor-list {
+    list-style: disc;
+    padding-left: 20px;
+}
+
+.sai-tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 6px;
+    background: #f3f4f5;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+/* Semáforo de canibalización */
+.sai-semaforo {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.sai-semaforo--amarillo {
+    background: #f39c12;
+}
+
+.sai-semaforo--naranja {
+    background: #e67e22;
+}
+
+.sai-semaforo--rojo {
+    background: #d63638;
+}
+

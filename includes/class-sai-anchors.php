@@ -128,6 +128,13 @@ class SAI_Anchors {
     public $request_title = '';
 
     /**
+     * (Opcional) Helpers públicos — no rompen compatibilidad si alguien los usa.
+     */
+    public function get_stopwords() { return $this->stopwords; }
+    public function normalize_text( $text ) { return $this->normalize( $text ); }
+    public function get_canonical_core( $canonical ) { return $this->canonical_core( $canonical ); }
+
+    /**
      * Cleans raw content removing headings, scripts and HTML tags.
      *
      * @param string $content Raw HTML content.
@@ -235,7 +242,7 @@ class SAI_Anchors {
             [ 'min_window' => 2, 'max_window' => 8, 'min_frequency' => 1, 'enforce_verbs' => false ],
         ];
 
-        $candidates   = [];
+        $candidates = [];
 
         foreach ( $rounds as $round ) {
             $new_candidates = $this->collect_valid_candidates(
@@ -1180,6 +1187,4 @@ class SAI_Anchors {
         ];
     }
 }
-
-
 
