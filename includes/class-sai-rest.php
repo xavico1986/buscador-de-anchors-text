@@ -411,10 +411,10 @@ class SAI_REST_Controller {
             return new WP_Error( 'sai_not_found', __( 'Entrada no encontrada.', 'anchors-sin-ia' ), [ 'status' => 404 ] );
         }
 
-        $plain              = function_exists( 'sai_lb_post_plain_text' ) ? sai_lb_post_plain_text( $madre_id ) : '';
-        $anchors            = new SAI_Anchors();
+        $plain                  = function_exists( 'sai_lb_post_plain_text' ) ? sai_lb_post_plain_text( $madre_id ) : '';
+        $anchors                = new SAI_Anchors();
         $anchors->request_title = get_the_title( $post );
-        $result             = $anchors->extract( $canonical, $plain );
+        $result                 = $anchors->extract( $canonical, $plain );
 
         if ( is_wp_error( $result ) ) {
             return $result;
@@ -488,10 +488,10 @@ class SAI_REST_Controller {
                 return new WP_Error( 'sai_not_found', __( 'Entrada no encontrada.', 'anchors-sin-ia' ), [ 'status' => 404 ] );
             }
 
-            $plain                 = function_exists( 'sai_lb_post_plain_text' ) ? sai_lb_post_plain_text( $id ) : '';
-            $anchors               = new SAI_Anchors();
+            $plain                  = function_exists( 'sai_lb_post_plain_text' ) ? sai_lb_post_plain_text( $id ) : '';
+            $anchors                = new SAI_Anchors();
             $anchors->request_title = get_the_title( $post );
-            $result                = $anchors->extract( $canonical, $plain );
+            $result                 = $anchors->extract( $canonical, $plain );
 
             if ( is_wp_error( $result ) ) {
                 return $result;
@@ -593,3 +593,4 @@ class SAI_REST_Controller {
         return rest_ensure_response( $export );
     }
 }
+

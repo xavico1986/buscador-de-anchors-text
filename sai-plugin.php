@@ -197,4 +197,3 @@ class Anchors_Sin_IA_Plugin {
 
 new Anchors_Sin_IA_Plugin();
 
-
