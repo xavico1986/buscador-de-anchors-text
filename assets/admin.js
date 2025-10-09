@@ -1,4 +1,3 @@
-<script>
 (function () {
     'use strict';
 
@@ -154,7 +153,7 @@
             if (state.anchors && state.anchors.length > 0) {
                 html += '<div class="sai-table-wrapper">';
                 html += '<table class="widefat fixed">';
-                html += '<thead><tr><th>' + escapeHtml((i18n.tableHeader && i18n.tableHeader[0]) || 'Anchor') + '</th><th>' + escapeHtml((i18n.tableHeader && i18n.tableHeader[1]) || 'Clasificación') + '</th><th>' + escapeHtml((i18n.tableHeader && i18n.tableHeader[2]) || 'Frecuencia') + '</th></tr></thead>';
+                html += '<thead><tr><th>' + escapeHtml((i18n.tableHeader && i18n.tableHeader[0]) || 'Anchor') + '</th><th>' + escapeHtml((i18n.tableHeader && i18n.tableHeader[1]) || 'Clasificación') + '</th><th>' + escapeHtml((i18n.tableHeader y && i18n.tableHeader[2]) || 'Frecuencia') + '</th></tr></thead>';
                 html += '<tbody>';
                 for (var i = 0; i < state.anchors.length; i++) {
                     var anchor = state.anchors[i];
@@ -448,5 +447,4 @@
         render();
     });
 })();
-</script>
 

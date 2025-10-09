@@ -25,7 +25,7 @@ class SAI_Anchors {
         'estar','estaremos','estará','estarán','estarás','estaré','estaréis','estaría','estaríais','estaríamos',
         'estarían','estarías','estas','estás','este','esto','estos','estoy','fin','fue','fueron','fui','fuimos',
         'ha','habéis','haber','habrá','habrán','habrás','habré','habréis','habría','habríais','habríamos',
-        'habrían','habrías','haciendo','hace','haces','hacia','han','hasta','hay','haya','hayan',
+        'habrían','habrías','hace','haces','hacia','han','hasta','hay','haya','hayan',
         'hayas','he','hemos','hube','hubiera','hubierais','hubieran','hubieras','hubieron','hubiese','hubieseis',
         'hubiesen','hubieses','hubimos','hubiste','hubisteis','la','las','le','les','lo','los','mas','más','me',
         'mi','mis','mucho','muchos','muy','nada','ni','no','nos','nosotras','nosotros','nuestra','nuestras',
@@ -236,7 +236,6 @@ class SAI_Anchors {
         ];
 
         $candidates   = [];
-        $target_total = (int) $presets['total'];
 
         foreach ( $rounds as $round ) {
             $new_candidates = $this->collect_valid_candidates(
@@ -249,7 +248,6 @@ class SAI_Anchors {
             );
 
             $candidates = $this->merge_candidate_lists( $candidates, $new_candidates );
-
             if ( empty( $candidates ) ) {
                 continue;
             }
@@ -295,41 +293,45 @@ class SAI_Anchors {
             unset( $items );
 
             $available_total = count( $grouped['exacta'] ) + count( $grouped['frase'] ) + count( $grouped['semantica'] );
-            if ( $available_total < $target_total ) {
+            if ( $available_total === 0 ) {
                 continue;
             }
 
             $quotas = $this->resolve_quotas( $presets, $grouped );
             if ( is_wp_error( $quotas ) ) {
-                return $quotas;
+                // sólo puede pasar si no había candidatos; intentamos siguiente ronda
+                continue;
             }
+
             $anchors = $this->select_anchors( $grouped, $quotas );
-
-            if ( count( $anchors ) === $target_total ) {
-                $counts_actual = [ 'exacta' => 0, 'frase' => 0, 'semantica' => 0 ];
-                foreach ( $anchors as $anchor ) {
-                    if ( isset( $counts_actual[ $anchor['class'] ] ) ) {
-                        $counts_actual[ $anchor['class'] ]++;
-                    }
-                }
-
-                return [
-                    'word_count'      => $word_count,
-                    'suggested_total' => count( $anchors ),
-                    'quotas'          => [
-                        'total'     => count( $anchors ),
-                        'exacta'    => $counts_actual['exacta'],
-                        'frase'     => $counts_actual['frase'],
-                        'semantica' => $counts_actual['semantica'],
-                    ],
-                    'anchors'         => $anchors,
-                ];
+            if ( empty( $anchors ) ) {
+                continue;
             }
+
+            // Devolver SIEMPRE lo que haya (aunque sea menos que el total preset)
+            $counts_actual = [ 'exacta' => 0, 'frase' => 0, 'semantica' => 0 ];
+            foreach ( $anchors as $anchor ) {
+                if ( isset( $counts_actual[ $anchor['class'] ] ) ) {
+                    $counts_actual[ $anchor['class'] ]++;
+                }
+            }
+
+            return [
+                'word_count'      => $word_count,
+                'suggested_total' => count( $anchors ),
+                'quotas'          => [
+                    'total'     => count( $anchors ),
+                    'exacta'    => $counts_actual['exacta'],
+                    'frase'     => $counts_actual['frase'],
+                    'semantica' => $counts_actual['semantica'],
+                ],
+                'anchors'         => $anchors,
+            ];
         }
 
         return new WP_Error(
             'sai_no_candidates',
-            __( 'No hay suficientes frases válidas para cubrir las cuotas SEO sin violar las reglas (exacta/frase/semántica).', 'anchors-sin-ia' ),
+            __( 'No hay suficientes frases válidas para cubrir ni una sugerencia.', 'anchors-sin-ia' ),
             [
                 'status'     => 422,
                 'word_count' => $word_count,
@@ -998,7 +1000,7 @@ class SAI_Anchors {
      * - Intenta cubrir las cuotas preset por tipo.
      * - Si falta alguna (p.ej. "frase"), rellena con otras clases disponibles,
      *   priorizando: frase <- semantica <- exacta, hasta alcanzar el total preset.
-     * - Si aun así no se llega al total, devuelve WP_Error.
+     * - Solo error si no hay candidatos.
      *
      * @param array $presets  Base presets (total, exacta, frase, semantica).
      * @param array $grouped  Candidatos agrupados por clase.
@@ -1018,18 +1020,23 @@ class SAI_Anchors {
             'semantica' => (int) $presets['semantica'],
         ];
 
+        $available_total = $available['exacta'] + $available['frase'] + $available['semantica'];
+        if ( $available_total === 0 ) {
+            // aquí sí, no hay candidatos
+            return new WP_Error(
+                'sai_quota_deficit',
+                __( 'No hay candidatos disponibles.', 'anchors-sin-ia' ),
+                [ 'status' => 422, 'need' => $need, 'available' => $available ]
+            );
+        }
+
         // Paso 1: asignación base limitada por disponibilidad.
         $quotas = [
             'exacta'    => min( $need['exacta'], $available['exacta'] ),
             'frase'     => min( $need['frase'], $available['frase'] ),
             'semantica' => min( $need['semantica'], $available['semantica'] ),
         ];
-
         $assigned = $quotas['exacta'] + $quotas['frase'] + $quotas['semantica'];
-
-        if ( $assigned >= $need['total'] ) {
-            return $quotas;
-        }
 
         // Preferencias para compensar déficits.
         $order_fill = [
@@ -1045,9 +1052,9 @@ class SAI_Anchors {
             'semantica' => max( 0, $available['semantica'] - $quotas['semantica'] ),
         ];
 
-        // Paso 2: intentar cumplir cuotas objetivo por clase usando excedentes de otras.
+        // Paso 2: intentar cumplir cuotas objetivo por clase usando excedentes.
         foreach ( [ 'frase', 'semantica', 'exacta' ] as $target ) {
-            while ( $assigned < $need['total'] && $quotas[ $target ] < $need[ $target ] ) {
+            while ( $assigned < min( $need['total'], $available_total ) && $quotas[ $target ] < $need[ $target ] ) {
                 $filled = false;
                 foreach ( $order_fill[ $target ] as $src ) {
                     if ( $surplus[ $src ] > 0 ) {
@@ -1058,38 +1065,20 @@ class SAI_Anchors {
                         break;
                     }
                 }
-                if ( ! $filled ) {
-                    break;
-                }
+                if ( ! $filled ) break;
             }
         }
 
-        // Paso 3: si aún falta para el total, añadir con lo que quede (prioridad SEO: frase -> semantica -> exacta).
+        // Paso 3: completar hasta el mínimo entre total necesario y total disponible (prioridad: frase -> semantica -> exacta).
         foreach ( [ 'frase', 'semantica', 'exacta' ] as $src ) {
-            while ( $assigned < $need['total'] && $surplus[ $src ] > 0 ) {
+            while ( $assigned < min( $need['total'], $available_total ) && $surplus[ $src ] > 0 ) {
                 $surplus[ $src ]--;
                 $quotas[ $src ]++;
                 $assigned++;
             }
         }
 
-        if ( $assigned < $need['total'] ) {
-            return new WP_Error(
-                'sai_quota_deficit',
-                sprintf(
-                    __( 'No se pueden cubrir las cuotas SEO: total necesario %d, candidatos disponibles %d', 'anchors-sin-ia' ),
-                    $need['total'],
-                    $assigned
-                ),
-                [
-                    'status'    => 422,
-                    'need'      => $need,
-                    'available' => $available,
-                    'assigned'  => $quotas,
-                ]
-            );
-        }
-
+        // Nunca error aquí: regresamos lo que se pudo asignar.
         return $quotas;
     }
 
@@ -1191,4 +1180,6 @@ class SAI_Anchors {
         ];
     }
 }
+
+
 
