@@ -361,7 +361,7 @@
             })
                 .then(handleFetchResponse)
                 .then(function (data) {
-                    // Si el backend devolvió word_count actualizado, reflejarlo.
+                    // Reflejar word_count actualizado si el backend lo envía
                     var updatedDetail = state.postDetail ? JSON.parse(JSON.stringify(state.postDetail)) : null;
                     if (updatedDetail && typeof data.word_count === 'number') {
                         updatedDetail.word_count = data.word_count;
@@ -447,4 +447,3 @@
         render();
     });
 })();
-

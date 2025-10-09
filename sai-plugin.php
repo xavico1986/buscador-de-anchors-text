@@ -75,6 +75,7 @@ class Anchors_Sin_IA_Plugin {
      * @param string $hook Current admin page hook.
      */
     public function enqueue_assets( $hook ) {
+
         // Página principal del extractor (anchors)
         if ( 'tools_page_anchors-sin-ia' === $hook ) {
             wp_enqueue_style(

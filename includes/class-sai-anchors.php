@@ -70,6 +70,40 @@ class SAI_Anchors {
     ];
 
     /**
+     * Patrones conversacionales/CTA a bloquear (sobre texto normalizado).
+     *
+     * @var array
+     */
+    protected $conversational_anchors_patterns = [
+        // querer
+        '/\\b(quiero|quieres|quiere|queremos|quieren|quisiera(s)?|querer|querria(s)?)\\b/u',
+        // necesitar
+        '/\\b(necesito|necesitas|necesita|necesitamos|necesitan|necesitar|necesitando|necesitaria(s)?)\\b/u',
+        // buscar
+        '/\\b(busc(o|as|a|amos|an)|buscar|buscando|busque|busquen)\\b/u',
+        // expresion "buscan un/una/el/la ..."
+        '/\\bbuscan\\s+(un|una|el|la)\\b/u',
+
+        // contactar / contacto (contáctanos -> "contactanos" al normalizar)
+        '/\\b(contact(ar|o|a|amos|an)|contactanos|contacto)\\b/u',
+        // llamar (llámanos -> "llamanos")
+        '/\\b(llam(ar|o|as|a|amos|an)|llamanos)\\b/u',
+        // escribir (escríbenos -> "escribenos")
+        '/\\b(escrib(ir|o|es|e|imos|en)|escribenos)\\b/u',
+
+        // solicitar / pedir
+        '/\\b(solicit(a|e|en|ar|ando)|pide|piden|pedir|pedido(s)?)\\b/u',
+        // cotizar / cotizacion
+        '/\\b(cotiza(r)?|cotiz(o|as|a|amos|an)|cotizacion(es)?)\\b/u',
+        // comprar
+        '/\\b(compra(r)?|compr(o|as|a|amos|an))\\b/u',
+
+        // frases CTA típicas
+        '/\\bsi\\s+(necesitas|buscas)\\b/u',
+        '/\\b(estoy|estas|esta|estamos|estan|están)\\s+(buscando|necesitando|queriendo)\\b/u',
+    ];
+
+    /**
      * Low-value verbs to exclude when enforcing verb filters (ampliada con variantes).
      *
      * @var array
@@ -255,6 +289,7 @@ class SAI_Anchors {
             );
 
             $candidates = $this->merge_candidate_lists( $candidates, $new_candidates );
+
             if ( empty( $candidates ) ) {
                 continue;
             }
@@ -795,6 +830,15 @@ class SAI_Anchors {
 
         if ( ! $contains_core ) {
             return false;
+        }
+
+        // Bloquear anchors conversacionales/CTA (sobre texto normalizado)
+        if ( ! empty( $this->conversational_anchors_patterns ) ) {
+            foreach ( $this->conversational_anchors_patterns as $re ) {
+                if ( preg_match( $re, $normalized ) ) {
+                    return false;
+                }
+            }
         }
 
         return true;
