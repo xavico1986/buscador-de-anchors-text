@@ -263,11 +263,13 @@
             if (!canonical) {
                 canonical = (search.keyword || '').trim();
             }
+
             if (!canonical) {
                 setNotice(i18n.keywordLabel || 'Introduce una palabra clave.', 'error');
                 render();
                 return;
             }
+
             uiState.canonicalInput = canonical;
 
             uiState.loading = true;

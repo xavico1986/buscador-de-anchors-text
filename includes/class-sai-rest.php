@@ -267,11 +267,7 @@ class SAI_REST_Controller {
             'ignore_sticky_posts' => true,
         ];
 
-        if ( ! $in_body ) {
-            $args['search_columns'] = [ 'post_title' ];
-        } else {
-            $args['search_columns'] = [ 'post_title', 'post_content' ];
-        }
+        $args['search_columns'] = $in_body ? [ 'post_title', 'post_content' ] : [ 'post_title' ];
 
         if ( ! empty( $exclude ) && is_array( $exclude ) ) {
             $args['post__not_in'] = array_map( 'absint', $exclude );
@@ -360,6 +356,9 @@ class SAI_REST_Controller {
         if ( '' === $clean ) {
             $clean = $anchors->clean_content( get_post_field( 'post_content', $post ) );
         }
+
+        // opcional: usar título como señal para core dinámico
+        $anchors->request_title = get_the_title( $post );
 
         $result = $anchors->extract( $canonical, $clean );
 

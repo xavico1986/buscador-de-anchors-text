@@ -17,24 +17,49 @@ if ( ! defined( 'SAI_PLUGIN_FILE' ) ) {
 
 define( 'SAI_PLUGIN_DIR', plugin_dir_path( SAI_PLUGIN_FILE ) );
 define( 'SAI_PLUGIN_URL', plugin_dir_url( SAI_PLUGIN_FILE ) );
+define( 'SAI_PLUGIN_VERSION', '1.0.0' );
 
-require_once SAI_PLUGIN_DIR . 'includes/class-sai-anchors.php';
-require_once SAI_PLUGIN_DIR . 'includes/linkbuilder-helpers.php';
-require_once SAI_PLUGIN_DIR . 'includes/class-sai-rest.php';
+/**
+ * Carga de archivos requeridos (con verificación).
+ */
+function sai_require_or_admin_notice( $path, $label ) {
+    if ( file_exists( $path ) ) {
+        require_once $path;
+        return true;
+    }
+    add_action( 'admin_notices', function () use ( $label ) {
+        echo '<div class="notice notice-error"><p><strong>Anchors sin IA:</strong> Falta el archivo requerido: ' . esc_html( $label ) . '</p></div>';
+    });
+    return false;
+}
 
+// includes
+sai_require_or_admin_notice( SAI_PLUGIN_DIR . 'includes/class-sai-anchors.php', 'includes/class-sai-anchors.php' );
+sai_require_or_admin_notice( SAI_PLUGIN_DIR . 'includes/linkbuilder-helpers.php', 'includes/linkbuilder-helpers.php' );
+sai_require_or_admin_notice( SAI_PLUGIN_DIR . 'includes/class-sai-rest.php', 'includes/class-sai-rest.php' );
+
+/**
+ * Plugin main.
+ */
 class Anchors_Sin_IA_Plugin {
 
-    /**
-     * Constructor.
-     */
     public function __construct() {
+        add_action( 'plugins_loaded', [ $this, 'load_textdomain' ] );
         add_action( 'admin_menu', [ $this, 'register_admin_page' ] );
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
-        new SAI_REST_Controller();
+
+        // Inicializa REST si la clase existe.
+        if ( class_exists( 'SAI_REST_Controller' ) ) {
+            new SAI_REST_Controller();
+        }
+    }
+
+    public function load_textdomain() {
+        load_plugin_textdomain( 'anchors-sin-ia', false, dirname( plugin_basename( SAI_PLUGIN_FILE ) ) . '/languages' );
     }
 
     /**
-     * Registers the admin page under Tools.
+     * Registra las páginas en Herramientas.
      */
     public function register_admin_page() {
         add_management_page(
@@ -55,26 +80,23 @@ class Anchors_Sin_IA_Plugin {
         );
     }
 
-    /**
-     * Outputs the container for the admin app.
-     */
     public function render_admin_page() {
         echo '<div class="wrap"><h1>' . esc_html__( 'Anchors sin IA', 'anchors-sin-ia' ) . '</h1><div id="sai-app"></div></div>';
     }
 
-    /**
-     * Outputs the container for the linkbuilder flow.
-     */
     public function render_linkbuilder_page() {
         echo '<div class="wrap"><h1>' . esc_html__( 'Linkbuilder sin IA', 'anchors-sin-ia' ) . '</h1><div id="sai-linkbuilder-app"></div></div>';
     }
 
     /**
-     * Enqueue assets only on plugin pages.
-     *
-     * @param string $hook Current admin page hook.
+     * Encola assets únicamente en las páginas del plugin.
      */
     public function enqueue_assets( $hook ) {
+        // Utilidad para versionar según filemtime (útil en dev).
+        $ver = function( $rel_path, $fallback ) {
+            $abs = SAI_PLUGIN_DIR . ltrim( $rel_path, '/' );
+            return file_exists( $abs ) ? (string) filemtime( $abs ) : $fallback;
+        };
 
         // Página principal del extractor (anchors)
         if ( 'tools_page_anchors-sin-ia' === $hook ) {
@@ -82,14 +104,14 @@ class Anchors_Sin_IA_Plugin {
                 'anchors-sin-ia-admin',
                 SAI_PLUGIN_URL . 'assets/admin.css',
                 [],
-                '1.0.0'
+                $ver( 'assets/admin.css', SAI_PLUGIN_VERSION )
             );
 
             wp_enqueue_script(
                 'anchors-sin-ia-admin',
                 SAI_PLUGIN_URL . 'assets/admin.js',
                 [],
-                '1.0.0',
+                $ver( 'assets/admin.js', SAI_PLUGIN_VERSION ),
                 true
             );
 
@@ -101,27 +123,27 @@ class Anchors_Sin_IA_Plugin {
                     'nonce'   => wp_create_nonce( 'wp_rest' ),
                     'perPage' => 50,
                     'i18n'    => [
-                        'search'         => __( 'Buscar', 'anchors-sin-ia' ),
-                        'view'           => __( 'Ver', 'anchors-sin-ia' ),
-                        'select'         => __( 'Seleccionar', 'anchors-sin-ia' ),
-                        'noResults'      => __( 'Sin resultados.', 'anchors-sin-ia' ),
-                        'copySuccess'    => __( 'Anchors copiados al portapapeles.', 'anchors-sin-ia' ),
-                        'copyError'      => __( 'No se pudo copiar. Copie manualmente.', 'anchors-sin-ia' ),
-                        'loading'        => __( 'Cargando...', 'anchors-sin-ia' ),
-                        'keywordLabel'   => __( 'Palabra clave (canónico)', 'anchors-sin-ia' ),
-                        'includeBody'    => __( 'Buscar también en el contenido', 'anchors-sin-ia' ),
-                        'wordCount'      => __( 'Palabras', 'anchors-sin-ia' ),
-                        'preset'         => __( 'Preset', 'anchors-sin-ia' ),
-                        'extractAnchors' => __( 'Extraer anchors', 'anchors-sin-ia' ),
-                        'copyAnchors'    => __( 'Copiar anchors', 'anchors-sin-ia' ),
-                        'tableHeader'    => [ __( 'Anchor', 'anchors-sin-ia' ), __( 'Clasificación', 'anchors-sin-ia' ), __( 'Frecuencia', 'anchors-sin-ia' ) ],
-                        'keywordRequired'=> __( 'Introduce una palabra clave.', 'anchors-sin-ia' ),
-                        'loadError'      => __( 'Ocurrió un error. Inténtalo nuevamente.', 'anchors-sin-ia' ),
-                        'noAnchors'      => __( 'No hay anchors disponibles.', 'anchors-sin-ia' ),
-                        'back'           => __( 'Volver a la búsqueda', 'anchors-sin-ia' ),
-                        'extracting'     => __( 'Extrayendo...', 'anchors-sin-ia' ),
-                        'pageLabel'      => __( 'Página', 'anchors-sin-ia' ),
-                        'usedQuotas'     => __( 'Cuotas usadas', 'anchors-sin-ia' ),
+                        'search'          => __( 'Buscar', 'anchors-sin-ia' ),
+                        'view'            => __( 'Ver', 'anchors-sin-ia' ),
+                        'select'          => __( 'Seleccionar', 'anchors-sin-ia' ),
+                        'noResults'       => __( 'Sin resultados.', 'anchors-sin-ia' ),
+                        'copySuccess'     => __( 'Anchors copiados al portapapeles.', 'anchors-sin-ia' ),
+                        'copyError'       => __( 'No se pudo copiar. Copie manualmente.', 'anchors-sin-ia' ),
+                        'loading'         => __( 'Cargando...', 'anchors-sin-ia' ),
+                        'keywordLabel'    => __( 'Palabra clave (canónico)', 'anchors-sin-ia' ),
+                        'includeBody'     => __( 'Buscar también en el contenido', 'anchors-sin-ia' ),
+                        'wordCount'       => __( 'Palabras', 'anchors-sin-ia' ),
+                        'preset'          => __( 'Preset', 'anchors-sin-ia' ),
+                        'extractAnchors'  => __( 'Extraer anchors', 'anchors-sin-ia' ),
+                        'copyAnchors'     => __( 'Copiar anchors', 'anchors-sin-ia' ),
+                        'tableHeader'     => [ __( 'Anchor', 'anchors-sin-ia' ), __( 'Clasificación', 'anchors-sin-ia' ), __( 'Frecuencia', 'anchors-sin-ia' ) ],
+                        'keywordRequired' => __( 'Introduce una palabra clave.', 'anchors-sin-ia' ),
+                        'loadError'       => __( 'Ocurrió un error. Inténtalo nuevamente.', 'anchors-sin-ia' ),
+                        'noAnchors'       => __( 'No hay anchors disponibles.', 'anchors-sin-ia' ),
+                        'back'            => __( 'Volver a la búsqueda', 'anchors-sin-ia' ),
+                        'extracting'      => __( 'Extrayendo...', 'anchors-sin-ia' ),
+                        'pageLabel'       => __( 'Página', 'anchors-sin-ia' ),
+                        'usedQuotas'      => __( 'Cuotas usadas', 'anchors-sin-ia' ),
                     ],
                 ]
             );
@@ -134,14 +156,14 @@ class Anchors_Sin_IA_Plugin {
                 'anchors-sin-ia-admin',
                 SAI_PLUGIN_URL . 'assets/admin.css',
                 [],
-                '1.0.0'
+                $ver( 'assets/admin.css', SAI_PLUGIN_VERSION )
             );
 
             wp_enqueue_script(
                 'anchors-sin-ia-linkbuilder',
                 SAI_PLUGIN_URL . 'assets/linkbuilder.js',
                 [],
-                '1.0.0',
+                $ver( 'assets/linkbuilder.js', SAI_PLUGIN_VERSION ),
                 true
             );
 
