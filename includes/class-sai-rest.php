@@ -109,6 +109,7 @@ class SAI_REST_Controller {
             ]
         );
 
+        // -------- Link Builder endpoints --------
         register_rest_route(
             self::REST_NAMESPACE,
             '/linkbuilder/state',
@@ -221,6 +222,7 @@ class SAI_REST_Controller {
                 'permission_callback' => [ $this, 'permission_check' ],
             ]
         );
+        // ----------------------------------------
     }
 
     /**
@@ -265,11 +267,7 @@ class SAI_REST_Controller {
             'ignore_sticky_posts' => true,
         ];
 
-        if ( ! $in_body ) {
-            $args['search_columns'] = [ 'post_title' ];
-        } else {
-            $args['search_columns'] = [ 'post_title', 'post_content' ];
-        }
+        $args['search_columns'] = $in_body ? [ 'post_title', 'post_content' ] : [ 'post_title' ];
 
         if ( ! empty( $exclude ) && is_array( $exclude ) ) {
             $args['post__not_in'] = array_map( 'absint', $exclude );
@@ -281,14 +279,18 @@ class SAI_REST_Controller {
         foreach ( $query->posts as $post ) {
             $cannibal = null;
             if ( $context_id && $canonical ) {
-                $cannibal = sai_lb_cannibal_score( $post->ID, $context_id, $canonical );
+                // Función auxiliar del Link Builder: puntaje/semaforo de canibalización.
+                $cannibal = function_exists( 'sai_lb_cannibal_score' )
+                    ? sai_lb_cannibal_score( $post->ID, $context_id, $canonical )
+                    : null;
             }
+
             $items[] = [
-                'id'    => $post->ID,
-                'title' => get_the_title( $post ),
-                'type'  => $post->post_type,
-                'link'  => get_permalink( $post ),
-                'cannibalization' => $cannibal,
+                'id'               => $post->ID,
+                'title'            => get_the_title( $post ),
+                'type'             => $post->post_type,
+                'link'             => get_permalink( $post ),
+                'cannibalization'  => $cannibal,
             ];
         }
 
@@ -355,10 +357,15 @@ class SAI_REST_Controller {
             $clean = $anchors->clean_content( get_post_field( 'post_content', $post ) );
         }
 
+        // opcional: usar título como señal para core dinámico
+        $anchors->request_title = get_the_title( $post );
+
         $result = $anchors->extract( $canonical, $clean );
 
         return rest_ensure_response( $result );
     }
+
+    // ===================== Link Builder handlers =====================
 
     /**
      * Returns stored linkbuilder state.
@@ -366,7 +373,7 @@ class SAI_REST_Controller {
      * @return WP_REST_Response
      */
     public function handle_lb_get_state() {
-        return rest_ensure_response( sai_lb_get_user_state() );
+        return rest_ensure_response( function_exists( 'sai_lb_get_user_state' ) ? sai_lb_get_user_state() : [] );
     }
 
     /**
@@ -375,9 +382,11 @@ class SAI_REST_Controller {
      * @return WP_REST_Response
      */
     public function handle_lb_reset() {
-        sai_lb_reset_state();
+        if ( function_exists( 'sai_lb_reset_state' ) ) {
+            sai_lb_reset_state();
+        }
 
-        return rest_ensure_response( sai_lb_get_user_state() );
+        return rest_ensure_response( function_exists( 'sai_lb_get_user_state' ) ? sai_lb_get_user_state() : [] );
     }
 
     /**
@@ -401,16 +410,16 @@ class SAI_REST_Controller {
             return new WP_Error( 'sai_not_found', __( 'Entrada no encontrada.', 'anchors-sin-ia' ), [ 'status' => 404 ] );
         }
 
-        $plain    = sai_lb_post_plain_text( $madre_id );
-        $anchors  = new SAI_Anchors();
+        $plain                  = function_exists( 'sai_lb_post_plain_text' ) ? sai_lb_post_plain_text( $madre_id ) : '';
+        $anchors                = new SAI_Anchors();
         $anchors->request_title = get_the_title( $post );
-        $result   = $anchors->extract( $canonical, $plain );
+        $result                 = $anchors->extract( $canonical, $plain );
 
         if ( is_wp_error( $result ) ) {
             return $result;
         }
 
-        $state = sai_lb_update_state(
+        $state = function_exists( 'sai_lb_update_state' ) ? sai_lb_update_state(
             [
                 'q_madre'           => $keyword,
                 'in_content_madre'  => $in_body,
@@ -427,7 +436,7 @@ class SAI_REST_Controller {
                 'q_nietas'          => '',
                 'in_content_nietas' => 0,
             ]
-        );
+        ) : [];
 
         return rest_ensure_response(
             [
@@ -447,7 +456,7 @@ class SAI_REST_Controller {
         $ids       = $request->get_param( 'ids' );
         $keyword   = sanitize_text_field( (string) $request->get_param( 'keyword' ) );
         $in_body   = (int) $request->get_param( 'in_content' );
-        $state     = sai_lb_get_user_state();
+        $state     = function_exists( 'sai_lb_get_user_state' ) ? sai_lb_get_user_state() : [];
         $madre_id  = isset( $state['madre_id'] ) ? (int) $state['madre_id'] : 0;
         $canonical = isset( $state['canonical'] ) ? $state['canonical'] : '';
 
@@ -478,10 +487,10 @@ class SAI_REST_Controller {
                 return new WP_Error( 'sai_not_found', __( 'Entrada no encontrada.', 'anchors-sin-ia' ), [ 'status' => 404 ] );
             }
 
-            $plain    = sai_lb_post_plain_text( $id );
-            $anchors  = new SAI_Anchors();
+            $plain                  = function_exists( 'sai_lb_post_plain_text' ) ? sai_lb_post_plain_text( $id ) : '';
+            $anchors                = new SAI_Anchors();
             $anchors->request_title = get_the_title( $post );
-            $result   = $anchors->extract( $canonical, $plain );
+            $result                 = $anchors->extract( $canonical, $plain );
 
             if ( is_wp_error( $result ) ) {
                 return $result;
@@ -494,7 +503,7 @@ class SAI_REST_Controller {
 
         $limit_nietas = max( 1, $total_anchor_sum );
 
-        $state = sai_lb_update_state(
+        $state = function_exists( 'sai_lb_update_state' ) ? sai_lb_update_state(
             [
                 'q_hijas'           => $keyword,
                 'in_content_hijas'  => $in_body,
@@ -505,7 +514,7 @@ class SAI_REST_Controller {
                 'q_nietas'          => '',
                 'in_content_nietas' => 0,
             ]
-        );
+        ) : [];
 
         return rest_ensure_response(
             [
@@ -525,7 +534,7 @@ class SAI_REST_Controller {
         $ids      = $request->get_param( 'ids' );
         $keyword  = sanitize_text_field( (string) $request->get_param( 'keyword' ) );
         $in_body  = (int) $request->get_param( 'in_content' );
-        $state    = sai_lb_get_user_state();
+        $state    = function_exists( 'sai_lb_get_user_state' ) ? sai_lb_get_user_state() : [];
         $madre_id = isset( $state['madre_id'] ) ? (int) $state['madre_id'] : 0;
         $hijas    = isset( $state['hijas_ids'] ) ? $state['hijas_ids'] : [];
 
@@ -547,13 +556,13 @@ class SAI_REST_Controller {
             return new WP_Error( 'sai_limit_nietas', __( 'Has superado el límite de nietas permitido.', 'anchors-sin-ia' ), [ 'status' => 400 ] );
         }
 
-        $state = sai_lb_update_state(
+        $state = function_exists( 'sai_lb_update_state' ) ? sai_lb_update_state(
             [
                 'q_nietas'          => $keyword,
                 'in_content_nietas' => $in_body,
                 'nietas_ids'        => $ids,
             ]
-        );
+        ) : [];
 
         return rest_ensure_response( $state );
     }
@@ -564,10 +573,14 @@ class SAI_REST_Controller {
      * @return WP_REST_Response|WP_Error
      */
     public function handle_lb_export() {
-        $state = sai_lb_get_user_state();
+        $state = function_exists( 'sai_lb_get_user_state' ) ? sai_lb_get_user_state() : [];
 
         if ( empty( $state['madre_id'] ) ) {
             return new WP_Error( 'sai_missing_madre', __( 'No hay madre seleccionada para exportar.', 'anchors-sin-ia' ), [ 'status' => 400 ] );
+        }
+
+        if ( ! function_exists( 'sai_lb_generate_csv_data' ) ) {
+            return new WP_Error( 'sai_missing_exporter', __( 'Exportador no disponible.', 'anchors-sin-ia' ), [ 'status' => 500 ] );
         }
 
         $export = sai_lb_generate_csv_data( $state );
@@ -579,3 +592,4 @@ class SAI_REST_Controller {
         return rest_ensure_response( $export );
     }
 }
+
